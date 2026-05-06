@@ -60,6 +60,8 @@ android {
                 mappingFileUploadEnabled = false
                 nativeSymbolUploadEnabled = false
             }
+            buildConfigField "boolean", "USE_LOCAL_SERVER", "true"
+            buildConfigField "String", "LOCAL_SERVER_ENDPOINT", "\"http://192.168.1.100:3000\""
         }
 
         release {

@@ -31,6 +31,7 @@ import co.candyhouse.sesame.utils.base64Encode
 import co.candyhouse.sesame.utils.hexStringToByteArray
 import co.candyhouse.sesame.utils.toHexString
 import co.candyhouse.sesame.utils.toUInt24ByteArray
+import co.candyhouse.sesame.utils.L
 import com.amazonaws.auth.AWSCredentialsProvider
 import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
@@ -41,16 +42,15 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * API Gateway 业务
+ * API Gateway 业务 - Supports both AWS and Local Server modes
  *
  * @author frey on 2026/1/12
  */
 object CHAPIClientBiz {
 
+    private const val TAG = "CHAPIClientBiz"
     private lateinit var appContext: Context
-
     private lateinit var cHApiClient: CHAPIClient
-
     private val httpScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     @Volatile
@@ -65,6 +65,7 @@ object CHAPIClientBiz {
         apiKey: String? = null
     ) {
         appContext = context.applicationContext
+        LocalServerConfig.initialize(context)
 
         val factory = ApiClientConfigBuilder.buildApiClientFactory(
             credentialsProvider = credentialsProvider,
@@ -73,8 +74,22 @@ object CHAPIClientBiz {
         )
 
         cHApiClient = factory.build(CHAPIClient::class.java)
-
         initialized = true
+
+        L.d(TAG, "CHAPIClientBiz initialized. Local Server Mode: ${LocalServerConfig.isEnabled()}")
+    }
+
+    @JvmStatic
+    @Synchronized
+    fun initializeLocalServer(context: Context, serverEndpoint: String? = null) {
+        appContext = context.applicationContext
+        LocalServerConfig.initialize(context)
+        if (serverEndpoint != null) {
+            LocalServerConfig.setServerEndpoint(serverEndpoint)
+        }
+        LocalServerConfig.setEnabled(true)
+        initialized = true
+        L.d(TAG, "CHAPIClientBiz initialized for Local Server. Endpoint: ${LocalServerConfig.getServerEndpoint()}")
     }
 
     private fun requireInit() {
@@ -90,6 +105,17 @@ object CHAPIClientBiz {
         requireInit()
         httpScope.launch {
             runCatching { block() }
+                .onSuccess { onResponse(Result.success(CHResultState.CHResultStateNetworks(it))) }
+                .onFailure { onResponse(Result.failure(it)) }
+        }
+    }
+
+    private fun <T> makeLocalApiCall(onResponse: CHResult<T>, block: suspend () -> T) {
+        requireInit()
+        httpScope.launch {
+            runCatching {
+                block()
+            }
                 .onSuccess { onResponse(Result.success(CHResultState.CHResultStateNetworks(it))) }
                 .onFailure { onResponse(Result.failure(it)) }
         }

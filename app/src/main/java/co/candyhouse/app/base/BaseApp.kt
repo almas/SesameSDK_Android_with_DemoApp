@@ -14,6 +14,7 @@ import co.candyhouse.sesame.server.CHAPIClientBiz
 import co.candyhouse.sesame.server.CHIotManagerPublic
 import co.candyhouse.sesame.utils.AppIdentifyIdUtil
 import co.candyhouse.sesame.utils.SharedPreferencesUtils
+import co.candyhouse.sesame.utils.L
 import co.receiver.TopicSubscriptionManager
 import com.amazonaws.mobile.client.AWSMobileClient
 import com.google.firebase.crashlytics.FirebaseCrashlytics
@@ -62,12 +63,37 @@ open class BaseApp : Application() {
     }
 
     private fun setupCrashlytics() {
-        FirebaseCrashlytics.getInstance().isCrashlyticsCollectionEnabled = !BuildConfig.DEBUG
+        // Firebase Crashlytics disabled for local server mode
+        try {
+            if (BuildConfig.DEBUG) {
+                FirebaseCrashlytics.getInstance().isCrashlyticsCollectionEnabled = false
+            }
+        } catch (e: Exception) {
+            // Ignore Firebase errors
+        }
     }
 
     private fun initializeAWS() {
-        AWSStatus.initAWSMobileClient(this)
-        setCHAPIClient()
+        // Check if local server mode should be enabled
+        val useLocalServer = BuildConfig.DEBUG // Can be configured via SharedPreferences
+
+        if (useLocalServer) {
+            // Initialize with local server (optional: provide endpoint)
+            // CHAPIClientBiz.initializeLocalServer(this, "http://192.168.1.100:3000")
+        } else {
+            try {
+                AWSStatus.initAWSMobileClient(this)
+                setCHAPIClient()
+            } catch (e: Exception) {
+                // Fallback to local server if AWS init fails
+                L.e("BaseApp", "AWS initialization failed, using local server mode", e)
+                try {
+                    CHAPIClientBiz.initializeLocalServer(this)
+                } catch (ex: Exception) {
+                    L.e("BaseApp", "Local server init also failed", ex)
+                }
+            }
+        }
     }
 
     private fun initializeWebViewProvider() {
