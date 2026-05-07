@@ -357,57 +357,7 @@ abstract class BaseDeviceSettingFG<T : ViewBinding> : BaseDeviceFG<T>(), NfcSett
             }
         }
         view?.findViewById<View>(R.id.dfu_zone)?.setOnClickListener {
-            if (LocalServerConfig.isOfflineMode()) {
-                toastMSG("Update is disabled in offline mode.")
-                return@setOnClickListener
-            }
-            val unlogined =
-                mDeviceModel.ssmLockLiveData.value?.deviceStatus?.value == CHDeviceLoginStatus.unlogined
-
-            if (unlogined) {
-                when (targetDevice.productModel) {
-                    CHProductModel.SSMOpenSensor, CHProductModel.RemoteNano -> return@setOnClickListener
-                    else -> {
-                        toastMSG(getString(R.string.toastBleNotReadyForDFU))
-                        return@setOnClickListener
-                    }
-                }
-            }
-            AlertView(getString(R.string.ssm_update), "", AlertStyle.IOS).apply {
-                addAction(
-                    AlertAction("OK", AlertActionStyle.NEGATIVE) {
-                        targetDevice.updateFirmware { res ->
-                            res.onSuccess {
-                                val dfuAddress = it.data.address
-                                L.d("DFU", "updateFirmware:$dfuAddress")
-
-                                val firmwarePath = targetDevice.getFirmwarePath(requireContext()) ?: return@onSuccess
-                                val pageDeviceKey = getPageDeviceKey() ?: return@onSuccess
-
-                                when (
-                                    DfuCenter.startDfu(
-                                        context = requireContext(),
-                                        deviceKey = pageDeviceKey,
-                                        deviceAddress = dfuAddress,
-                                        firmwarePath = firmwarePath,
-                                        delegate = this@BaseDeviceSettingFG,
-                                        serviceClass = DfuService::class.java
-                                    )
-                                ) {
-                                    is DfuCenter.StartResult.Started -> {}
-
-                                    is DfuCenter.StartResult.AlreadyRunningSameDevice -> {}
-
-                                    is DfuCenter.StartResult.Busy -> {
-                                        toastMSG(getString(R.string.dfu_busy))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                )
-                show(activity as AppCompatActivity)
-            }
+            checkAndShowUpdateConfirmation(targetDevice)
         }
 
         view?.findViewById<View>(R.id.battery_zone)?.setOnClickListener {
@@ -423,6 +373,104 @@ abstract class BaseDeviceSettingFG<T : ViewBinding> : BaseDeviceFG<T>(), NfcSett
         
         view?.findViewById<View>(R.id.share_zone)?.setOnClickListener {
             showShareMenu(targetDevice)
+        }
+    }
+
+    private fun checkAndShowUpdateConfirmation(targetDevice: CHDevices) {
+        val context = context ?: return
+        val currentVersion = targetDevice.userKey?.stateInfo?.currentFwVer
+        val firmwareName = targetDevice.getFirmwareName(context)
+        
+        // If we don't have current version info from server, try to get from device directly
+        val finalCurrentVersion = currentVersion ?: targetDevice.mechStatus?.let {
+            // Get version from device via BLE if possible
+            getVersionFromDevice(targetDevice)
+        }
+        
+        // If we have firmware file name, compare
+        firmwareName?.let { firmwareFile ->
+            // Check if the firmware file contains the current version tag
+            val isLatest = firmwareFile.contains(finalCurrentVersion?.split("-")?.last() ?: "")
+            
+            if (isLatest) {
+                // Already at latest version - show confirmation dialog
+                AlertView(
+                    context.getString(R.string.ssm_update),
+                    context.getString(R.string.already_latest_version),
+                    AlertStyle.IOS
+                ).apply {
+                    addAction(
+                        AlertAction(
+                            context.getString(android.R.string.cancel),
+                            AlertActionStyle.DEFAULT
+                        ) {}
+                    )
+                    addAction(
+                        AlertAction(
+                            context.getString(android.R.string.ok),
+                            AlertActionStyle.NEGATIVE
+                        ) {
+                            performFirmwareUpdate(targetDevice, firmwareFile)
+                        }
+                    )
+                    show(activity as AppCompatActivity)
+                }
+            } else {
+                // Not latest version - proceed with update
+                performFirmwareUpdate(targetDevice, firmwareFile)
+            }
+        } ?: run {
+            // No firmware file found
+            toastMSG(context.getString(R.string.firmware_file_not_found))
+        }
+    }
+
+    private fun getVersionFromDevice(targetDevice: CHDevices): String? {
+        // This is a placeholder - in offline mode we might not have BLE connection
+        // The firmware file name parsing should be sufficient
+        return null
+    }
+
+    private fun performFirmwareUpdate(targetDevice: CHDevices, firmwareFile: String) {
+        val context = requireContext()
+        val firmwarePath = targetDevice.getFirmwarePath(context) ?: run {
+            toastMSG(context.getString(R.string.firmware_file_not_found))
+            return
+        }
+        
+        val pageDeviceKey = getPageDeviceKey() ?: return
+        
+        AlertView(getString(R.string.ssm_update), "", AlertStyle.IOS).apply {
+            addAction(
+                AlertAction("OK", AlertActionStyle.NEGATIVE) {
+                    targetDevice.updateFirmware { res ->
+                        res.onSuccess {
+                            val dfuAddress = it.data.address
+                            L.d("DFU", "updateFirmware:$dfuAddress")
+
+                            when (
+                                DfuCenter.startDfu(
+                                    context = context,
+                                    deviceKey = pageDeviceKey,
+                                    deviceAddress = dfuAddress,
+                                    firmwarePath = firmwarePath,
+                                    delegate = this@BaseDeviceSettingFG,
+                                    serviceClass = DfuService::class.java
+                                )
+                            ) {
+                                is DfuCenter.StartResult.Started -> {}
+
+                                is DfuCenter.StartResult.AlreadyRunningSameDevice -> {}
+
+                                is DfuCenter.StartResult.Busy -> {
+                                    toastMSG(getString(R.string.dfu_busy))
+                                }
+                            }
+                        }
+                    }
+                }
+            )
+            show(activity as AppCompatActivity)
         }
     }
     

@@ -253,4 +253,6 @@
     <string name="share_text">Share as Text</string>
     <string name="share_device_description">Share your Sesame device with another app or device.</string>
     <string name="share_data_content">Device UUID: %1$s\nDevice Model: %2$s\nKey Level: %3$s\nBattery: %4$s\n\nSecret Key: %5$s\n\nThis data allows another app/device to connect to this Sesame device.</string>
+    <string name="already_latest_version">Already at the latest version. Do you want to force update anyway?</string>
+    <string name="firmware_file_not_found">Firmware file not found. Please try again later.</string>
 </resources>

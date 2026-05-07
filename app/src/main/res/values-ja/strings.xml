@@ -238,6 +238,14 @@
     <string name="ble_tx_power">BLE送信出力</string>
     <string name="dBm">dBm</string>
     <string name="dfu_busy">他のCANDY HOUSE製品を更新中、お待ち下さいませ。</string>
+    <string name="share_device">鍵をシェア</string>
+    <string name="share_device_data">デバイスデータ</string>
+    <string name="share_qr_code">QRコードをシェア</string>
+    <string name="share_text">テキストとしてシェア</string>
+    <string name="share_device_description">セサミデバイスを他のアプリやデバイスと共有します。</string>
+    <string name="share_data_content">Device UUID: %1$s\nDevice Model: %2$s\nKey Level: %3$s\nBattery: %4$s\n\nSecret Key: %5$s\n\nこのデータにより、別のアプリやデバイスがこのセサミデバイスに接続できるようになります。</string>
+    <string name="already_latest_version">すでに最新バージョンです。強制的にアップデートしますか？</string>
+    <string name="firmware_file_not_found">ファームウェアファイルが見つかりません。後でもう一度お試しください。</string>
 </resources>
 
 

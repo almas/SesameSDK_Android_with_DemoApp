@@ -252,4 +252,12 @@
     <string name="ble_tx_power">BLE 发射功率</string>
     <string name="dBm">dBm</string>
     <string name="dfu_busy">其他CANDY HOUSE产品正在进行升级, 请稍候。</string>
+    <string name="share_device">分享设备</string>
+    <string name="share_device_data">设备数据</string>
+    <string name="share_qr_code">分享二维码</string>
+    <string name="share_text">以文本形式分享</string>
+    <string name="share_device_description">与其他应用程序或设备分享您的 Sesame 设备。</string>
+    <string name="share_data_content">设备 UUID: %1$s\n设备型号: %2$s\n钥匙权限: %3$s\n电量: %4$s\n\n密钥: %5$s\n\n此数据允许其他应用/设备连接到此 Sesame 设备。</string>
+    <string name="already_latest_version">已经是最新版本。是否仍要强制更新？</string>
+    <string name="firmware_file_not_found">未找到固件文件。请稍后再试。</string>
 </resources>
