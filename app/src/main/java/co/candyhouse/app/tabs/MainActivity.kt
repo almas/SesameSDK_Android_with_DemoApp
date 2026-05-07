@@ -19,6 +19,7 @@ import co.candyhouse.app.base.NfcSetting
 import co.candyhouse.app.base.setPage
 import co.candyhouse.app.ext.NfcHandler
 import co.candyhouse.app.ext.aws.AWSStatus
+import co.candyhouse.sesame.server.LocalServerConfig
 import co.candyhouse.app.ext.webview.data.WebViewConfig
 import co.candyhouse.app.ext.webview.manager.WebViewPoolManager
 import co.candyhouse.app.tabs.devices.ssm2.getNFC
@@ -67,7 +68,10 @@ class MainActivity : BaseActivity(), OnSharedPreferenceChangeListener {
         // 先显示本地数据
         deviceViewModel.updateDevices()
 
-        if (AWSStatus.isInitialized()) {
+        if (LocalServerConfig.isOfflineMode()) {
+            L.d("MainActivity", "Running in offline mode, skipping AWS setup")
+            deviceViewModel.refreshDevices()
+        } else if (AWSStatus.isInitialized()) {
             setupAWSFeatures()
         } else {
             AWSStatus.initAWSMobileClient(this) { isLoggedIn ->

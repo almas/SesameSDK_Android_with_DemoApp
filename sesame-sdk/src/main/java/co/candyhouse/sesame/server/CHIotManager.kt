@@ -63,9 +63,9 @@ internal object CHIotManager {
 
     // 启动连接（从应用启动处调用）
     fun startConnection() {
-        // Skip IoT connection if using local server mode
-        if (LocalServerConfig.isEnabled()) {
-            L.d(tag, "Skipping AWS IoT connection - using local server mode")
+        // Skip IoT connection if using local server mode or offline mode
+        if (LocalServerConfig.isEnabled() || LocalServerConfig.isOfflineMode()) {
+            L.d(tag, "Skipping AWS IoT connection - using ${if (LocalServerConfig.isOfflineMode()) "offline" else "local server"} mode")
             return
         }
 

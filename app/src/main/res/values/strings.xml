@@ -1,6 +1,6 @@
 <resources>
     <string name="launching_why_need_location_permission">On Android 6.0 and up, we need permission for accessing location to make Bluetooth work properly. Without that, this application will not be able to discover Sesames.</string>
-    <string name="app_name">Sesame</string>
+    <string name="app_name">Sesame offline</string>
     <string name="second2">second</string>
     <string name="dfu_status_error_msg">Error occurred</string>
     <string name="default_face_name">Face🖊️</string>
@@ -247,4 +247,10 @@
     <string name="ble_tx_power">BLE TX power</string>
     <string name="dBm">dBm</string>
     <string name="dfu_busy">Updating another CANDY HOUSE product. Please wait...</string>
+    <string name="share_device">Share Device</string>
+    <string name="share_device_data">Device Data</string>
+    <string name="share_qr_code">Share QR Code</string>
+    <string name="share_text">Share as Text</string>
+    <string name="share_device_description">Share your Sesame device with another app or device.</string>
+    <string name="share_data_content">Device UUID: %1$s\nDevice Model: %2$s\nKey Level: %3$s\nBattery: %4$s\n\nSecret Key: %5$s\n\nThis data allows another app/device to connect to this Sesame device.</string>
 </resources>

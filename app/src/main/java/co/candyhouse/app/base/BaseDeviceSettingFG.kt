@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
@@ -11,6 +13,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.Settings
 import android.view.View
+import androidx.core.content.FileProvider
 import android.widget.RelativeLayout
 import android.widget.Switch
 import android.widget.TextView
@@ -43,6 +46,7 @@ import co.candyhouse.app.tabs.devices.ssm2.setIsNOHand
 import co.candyhouse.app.tabs.devices.ssm2.setIsWidget
 import co.candyhouse.app.tabs.devices.ssm2.setNFC
 import co.candyhouse.app.tabs.devices.ssm2.setting.DfuService
+import co.candyhouse.sesame.server.LocalServerConfig
 import co.candyhouse.sesame.open.CHBleManager
 import co.candyhouse.sesame.open.CHBleStatusDelegate
 import co.candyhouse.sesame.open.CHScanStatus
@@ -53,11 +57,15 @@ import co.candyhouse.sesame.open.devices.base.CHDevices
 import co.candyhouse.sesame.open.devices.base.CHDevices.Companion.UNSET_BLE_TX_POWER_VALUE
 import co.candyhouse.sesame.open.devices.base.CHProductModel
 import co.candyhouse.sesame.utils.L
+import co.utils.base64Encode
+import co.utils.hexStringToByteArray
 import co.utils.alertview.AlertView
 import co.utils.alertview.enums.AlertActionStyle
 import co.utils.alertview.enums.AlertStyle
 import co.utils.alertview.fragments.toastMSG
 import co.utils.alertview.objects.AlertAction
+import co.utils.base64Encode
+import co.utils.hexStringToByteArray
 import co.utils.safeNavigate
 import com.warkiz.widget.IndicatorSeekBar
 import com.warkiz.widget.OnSeekChangeListener
@@ -249,6 +257,26 @@ abstract class BaseDeviceSettingFG<T : ViewBinding> : BaseDeviceFG<T>(), NfcSett
 
     private fun setupListeners(targetDevice: CHDevices) {
         view?.findViewById<View>(R.id.drop_zone)?.setOnClickListener {
+            if (LocalServerConfig.isOfflineMode()) {
+                AlertView("", "", AlertStyle.IOS).apply {
+                    addAction(
+                        AlertAction(
+                            getString(
+                                R.string.trash_device_key,
+                                targetDevice.getNickname()
+                            ), AlertActionStyle.NEGATIVE
+                        ) {
+                            mDeviceModel.dropDeviceOffline()
+                            if (isAdded && !isViewDestroyed) {
+                                viewLifecycleOwner.lifecycleScope.launch {
+                                    findNavController().popBackStack(R.id.deviceListPG, false)
+                                }
+                            }
+                        })
+                    show(activity as AppCompatActivity)
+                }
+                return@setOnClickListener
+            }
             AlertView("", "", AlertStyle.IOS).apply {
                 addAction(
                     AlertAction(
@@ -275,6 +303,22 @@ abstract class BaseDeviceSettingFG<T : ViewBinding> : BaseDeviceFG<T>(), NfcSett
             }
         }
         view?.findViewById<View>(R.id.reset_zone)?.setOnClickListener {
+            if (LocalServerConfig.isOfflineMode()) {
+                AlertView("", "", AlertStyle.IOS).apply {
+                    addAction(
+                        AlertAction(
+                            getString(R.string.ssm_delete),
+                            AlertActionStyle.NEGATIVE
+                        ) {
+                            mDeviceModel.resetDeviceOffline()
+                            if (isAdded) {
+                                findNavController().popBackStack(R.id.deviceListPG, false)
+                            }
+                        })
+                    show(activity as AppCompatActivity)
+                }
+                return@setOnClickListener
+            }
             AlertView("", "", AlertStyle.IOS).apply {
                 addAction(
                     AlertAction(
@@ -313,6 +357,10 @@ abstract class BaseDeviceSettingFG<T : ViewBinding> : BaseDeviceFG<T>(), NfcSett
             }
         }
         view?.findViewById<View>(R.id.dfu_zone)?.setOnClickListener {
+            if (LocalServerConfig.isOfflineMode()) {
+                toastMSG("Update is disabled in offline mode.")
+                return@setOnClickListener
+            }
             val unlogined =
                 mDeviceModel.ssmLockLiveData.value?.deviceStatus?.value == CHDeviceLoginStatus.unlogined
 
@@ -371,6 +419,178 @@ abstract class BaseDeviceSettingFG<T : ViewBinding> : BaseDeviceFG<T>(), NfcSett
                 )
             )
             safeNavigate(R.id.action_DeviceMember_to_webViewFragment, config.toBundle())
+        }
+        
+        view?.findViewById<View>(R.id.share_zone)?.setOnClickListener {
+            showShareMenu(targetDevice)
+        }
+    }
+    
+    private fun showShareMenu(device: CHDevices) {
+        // Get device info and key
+        val uuid = device.deviceId?.toString()?.uppercase() ?: "N/A"
+        val level = device.getLevel()
+        val key = try { device.getKey() } catch (e: Exception) { null }
+        
+        if (key == null) {
+            toastMSG("Device key not found")
+            return
+        }
+        
+        val productModel = device.productModel
+        val productType = productModel.productType()
+        
+        // Match the logic in ScanQRcodeFG.kt for "valid" models
+        val isValidModel = productModel == CHProductModel.SS5 || productModel == CHProductModel.BiKeLock2 || 
+                           productModel == CHProductModel.BiKeLock3 || productModel == CHProductModel.SSMTouchPro || 
+                           productModel == CHProductModel.SSMTouch2Pro || productModel == CHProductModel.SSMTouch || 
+                           productModel == CHProductModel.SSMTouch2 || productModel == CHProductModel.SS5PRO || 
+                           productModel == CHProductModel.BLEConnector || productModel == CHProductModel.Remote || 
+                           productModel == CHProductModel.RemoteNano || productModel == CHProductModel.SS5US || 
+                           productModel == CHProductModel.SesameBot2 || productModel == CHProductModel.SesameBot3 ||
+                           productModel == CHProductModel.SSMFacePro || productModel == CHProductModel.SSMFace2Pro || 
+                           productModel == CHProductModel.SSMFaceProAI || productModel == CHProductModel.SSMFace2ProAI || 
+                           productModel == CHProductModel.SSMFaceAI || productModel == CHProductModel.SSMFace2AI || 
+                           productModel == CHProductModel.SS6 || productModel == CHProductModel.SS6Pro ||
+                           productModel == CHProductModel.SS6ProSLiDingDoor || productModel == CHProductModel.Hub3 || 
+                           productModel == CHProductModel.SSMFace || productModel == CHProductModel.SSMFace2 || 
+                           productModel == CHProductModel.SSMOpenSensor2 || productModel == CHProductModel.SSMOpenSensor ||
+                           productModel == CHProductModel.SSM_MIWA || productModel == CHProductModel.Hub3_LTE
+
+        val secretKeyBytes = key.secretKey.hexStringToByteArray()
+        val publicKeyBytes = key.sesame2PublicKey.hexStringToByteArray()
+        val keyIndexBytes = key.keyIndex.hexStringToByteArray()
+        val uuidBytes = key.deviceUUID.replace("-", "").hexStringToByteArray()
+
+        // Pack the data into the 'sk' parameter as expected by the scanner
+        val skBytes = if (isValidModel) {
+            // Format for valid models: [1 byte Type][16 bytes Secret][4 bytes Pub][2 bytes Index][16 bytes UUID] = 39 bytes
+            val result = ByteArray(39)
+            result[0] = productType.toByte()
+            System.arraycopy(secretKeyBytes, 0, result, 1, 16.coerceAtMost(secretKeyBytes.size))
+            System.arraycopy(publicKeyBytes, 0, result, 17, 4.coerceAtMost(publicKeyBytes.size))
+            System.arraycopy(keyIndexBytes, 0, result, 21, 2.coerceAtMost(keyIndexBytes.size))
+            System.arraycopy(uuidBytes, 0, result, 23, 16.coerceAtMost(uuidBytes.size))
+            result
+        } else {
+            // Format for other models: [1 byte Type][16 bytes Secret][64 bytes Pub][2 bytes Index][16 bytes UUID] = 99 bytes
+            val result = ByteArray(99)
+            result[0] = productType.toByte()
+            System.arraycopy(secretKeyBytes, 0, result, 1, 16.coerceAtMost(secretKeyBytes.size))
+            System.arraycopy(publicKeyBytes, 0, result, 17, 64.coerceAtMost(publicKeyBytes.size))
+            System.arraycopy(keyIndexBytes, 0, result, 81, 2.coerceAtMost(keyIndexBytes.size))
+            System.arraycopy(uuidBytes, 0, result, 83, 16.coerceAtMost(uuidBytes.size))
+            result
+        }
+
+        val encodedSecret = skBytes.base64Encode()
+        
+        // URL encode the nickname for the QR code (handle special characters)
+        val nickname = device.getNickname()?.let { 
+            java.net.URLEncoder.encode(it, "UTF-8")
+                .replace("+", "%20") // Replace + with %20 for cleaner URLs
+        } ?: ""
+        
+        // Create QR code content with correct format: ssm://UI?t=sk&sk=BASE64_PACKED_DATA&l=LEVEL&n=NICKNAME
+        val qrContent = "ssm://UI?t=sk&sk=$encodedSecret&l=$level&n=$nickname"
+        
+        L.d("showShareMenu", "QR Content: $qrContent")
+        L.d("showShareMenu", "Model: ${productModel.deviceModelName()} ($productType)")
+        L.d("showShareMenu", "Level: $level")
+        
+        // For text sharing, keep it simple
+        val shareContent = """
+            Device UUID: $uuid
+            Secret Key: ${key.secretKey}
+            
+            This data allows another app/device to connect to this Sesame device.
+        """.trimIndent()
+        
+        // Show share dialog
+        val items = listOf(
+            Pair(getString(R.string.share_qr_code), "qr"),
+            Pair(getString(R.string.share_text), "text")
+        )
+        
+        val itemsArray = items.toTypedArray()
+        
+        activity?.let { act ->
+            androidx.appcompat.app.AlertDialog.Builder(act)
+                .setTitle(R.string.share_device)
+                .setItems(itemsArray.map { it.first }.toTypedArray()) { _, which ->
+                    val selectedType = items[which].second
+                    when (selectedType) {
+                        "qr" -> shareQRCode(qrContent)
+                        "text" -> shareText(shareContent)
+                    }
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
+    }
+    
+    private fun shareQRCode(content: String) {
+        try {
+            // Use the existing QRCodeEncoder from the SDK
+            val qrBitmap = cn.bingoogolapple.qrcode.zxing.QRCodeEncoder.syncEncodeQRCode(
+                content,
+                500
+            )
+            
+            // Save QR code to temp file and share
+            val uri = saveBitmapToUri(qrBitmap)
+            if (uri == null) {
+                toastMSG("Failed to save QR code")
+                return
+            }
+            
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "image/png"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            
+            activity?.let { act ->
+                act.startActivity(Intent.createChooser(intent, act.getString(R.string.share_device)))
+            }
+        } catch (e: Exception) {
+            L.e("ShareQR", "Error sharing QR code: ${e.message}")
+            toastMSG("Failed to generate QR code")
+        }
+    }
+    
+    private fun shareText(content: String) {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, content)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        
+        activity?.let { act ->
+            act.startActivity(Intent.createChooser(intent, act.getString(R.string.share_device)))
+        }
+    }
+    
+    private fun saveBitmapToUri(bitmap: Bitmap): Uri? {
+        val context = requireContext()
+        val fileName = "sesame_device_qr_${System.currentTimeMillis()}.png"
+        
+        try {
+            // Save to external files directory to use with FileProvider
+            val imagesFolder = java.io.File(context.getExternalFilesDir(null), "images")
+            if (!imagesFolder.exists()) {
+                imagesFolder.mkdirs()
+            }
+            val file = java.io.File(imagesFolder, fileName)
+            java.io.FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            
+            // Return Uri from FileProvider
+            return FileProvider.getUriForFile(context, context.packageName, file)
+        } catch (e: Exception) {
+            L.e("SaveBitmap", "Error saving QR code: ${e.message}")
+            return null
         }
     }
 

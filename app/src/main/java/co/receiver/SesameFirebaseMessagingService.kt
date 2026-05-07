@@ -21,12 +21,18 @@ class SesameFirebaseMessagingService : FirebaseMessagingService() {
     private val tag = "SesameFirebaseMessagingService"
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
-        // Firebase messaging disabled in local server mode
-        L.d(tag, "Firebase messaging is disabled - using local server mode")
+        if (LocalServerConfig.isEnabled() || LocalServerConfig.isOfflineMode()) {
+            L.d(tag, "Firebase messaging is disabled in ${if (LocalServerConfig.isOfflineMode()) "offline" else "local server"} mode")
+            return
+        }
+        // Original Firebase handling would go here
     }
 
     override fun onNewToken(token: String) {
-        // FCM token registration disabled in local server mode
-        L.d(tag, "FCM token registration disabled - using local server mode")
+        if (LocalServerConfig.isEnabled() || LocalServerConfig.isOfflineMode()) {
+            L.d(tag, "FCM token registration disabled in ${if (LocalServerConfig.isOfflineMode()) "offline" else "local server"} mode")
+            return
+        }
+        // Original Firebase handling would go here
     }
 }

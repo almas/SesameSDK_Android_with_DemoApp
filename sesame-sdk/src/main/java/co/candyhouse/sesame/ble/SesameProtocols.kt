@@ -29,7 +29,7 @@ internal enum class SesameResultCode(val value: UByte) {
     success(0U), invalidFormat(1U), notSupported(2U), StorageFail(3U), invalidSig(4U), notFound(5U), UNKNOWN(6U), BUSY(7U), INVALID_PARAM(8U), ;
 }
 
-internal enum class SesameItemCode(val value: UByte) {
+enum class SesameItemCode(val value: UByte) {
 
     none(0u), registration(1u), login(2u), user(3u), history(4u), versionTag(5u), disconnectRebootNow(6u), enableDFU(7u), time(8u), bleConnectionParam(9u), bleAdvParam(10u), autolock(11u), serverAdvKick(12u), ssmtoken(13u), initial(14u), IRER(15u), timePhone(16u), magnet(17u), SSM2_ITEM_CODE_HISTORY_DELETE(18u), SENSOR_INVERVAL(19u), SENSOR_INVERVAL_GET(20u),
 
