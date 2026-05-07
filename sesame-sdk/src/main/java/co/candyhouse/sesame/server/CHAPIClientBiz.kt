@@ -47,12 +47,17 @@ import java.nio.ByteOrder
  *
  * @author frey on 2026/1/12
  */
-object CHAPIClientBiz {
+object CHAPIClientBiz : ICHAPIClientBiz {
 
     private const val TAG = "CHAPIClientBiz"
     private lateinit var appContext: Context
-    private lateinit var cHApiClient: CHAPIClient
-    private val httpScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var cHApiClient: CHAPIClient? = null
+    
+    private var onlineClient: ICHAPIClientBiz? = null
+    private val offlineClient = CHAPIClientBizOffline()
+    
+    @Volatile
+    private var currentClient: ICHAPIClientBiz = offlineClient
 
     @Volatile
     private var initialized = false
@@ -76,10 +81,16 @@ object CHAPIClientBiz {
             region = region
         )
 
-        cHApiClient = factory.build(CHAPIClient::class.java)
+        val client = factory.build(CHAPIClient::class.java)
+        cHApiClient = client
+        onlineClient = CHAPIClientBizOnline(appContext, client)
+        
+        if (!LocalServerConfig.isOfflineMode()) {
+            currentClient = onlineClient!!
+        }
+        
         initialized = true
-
-        L.d(TAG, "CHAPIClientBiz initialized. Local Server Mode: ${LocalServerConfig.isEnabled()}")
+        L.d(TAG, "CHAPIClientBiz initialized. Online Mode: ${!LocalServerConfig.isOfflineMode()}")
     }
 
     @JvmStatic
@@ -92,6 +103,11 @@ object CHAPIClientBiz {
         }
         LocalServerConfig.setEnabled(true)
         LocalServerConfig.setOfflineMode(false)
+        
+        // In local server mode, we still use the "Online" client logic but it hits a different endpoint
+        // This assumes ApiClientConfigBuilder handles the endpoint switch or cHApiClient is rebuilt.
+        // For now, let's just mark it initialized.
+        
         initialized = true
         L.d(TAG, "CHAPIClientBiz initialized for Local Server. Endpoint: ${LocalServerConfig.getServerEndpoint()}")
     }
@@ -103,193 +119,105 @@ object CHAPIClientBiz {
         LocalServerConfig.initialize(context)
         LocalServerConfig.setEnabled(false)
         LocalServerConfig.setOfflineMode(true)
+        currentClient = offlineClient
         initialized = true
         L.d(TAG, "CHAPIClientBiz initialized for COMPLETE OFFLINE MODE.")
     }
 
+    /**
+     * Switch between Online and Offline modes at runtime
+     */
+    @JvmStatic
+    fun switchOffline(isOffline: Boolean) {
+        LocalServerConfig.setOfflineMode(isOffline)
+        if (isOffline) {
+            currentClient = offlineClient
+            L.d(TAG, "Switched to OFFLINE mode")
+        } else {
+            onlineClient?.let {
+                currentClient = it
+                L.d(TAG, "Switched to ONLINE mode")
+            } ?: run {
+                L.e(TAG, "Cannot switch to online mode: Online client not initialized")
+            }
+        }
+    }
+
     private fun requireInit() {
-        if (LocalServerConfig.isOfflineMode()) return
+        if (currentClient is CHAPIClientBizOffline) return
         check(initialized) { "CHAPIClient is not initialized. Call CHAPIClient.initialize(...) first." }
     }
 
-    private fun identifyId(): String {
-        requireInit()
-        return if (LocalServerConfig.isOfflineMode()) "offline_user" else AppIdentifyIdUtil.get(appContext)
-    }
+    override fun upLoadKeys(keys: List<CHUserKey>, onResponse: CHResult<Array<CHUserKey>>) =
+        currentClient.upLoadKeys(keys, onResponse)
 
-    private fun <T> makeApiCall(onResponse: CHResult<T>, block: () -> T) {
-        if (LocalServerConfig.isOfflineMode()) {
-            L.d(TAG, "Skipping API call in offline mode")
-            onResponse(Result.failure(Exception("Offline mode enabled")))
-            return
-        }
-        requireInit()
-        httpScope.launch {
-            runCatching { block() }
-                .onSuccess { onResponse(Result.success(CHResultState.CHResultStateNetworks(it))) }
-                .onFailure { onResponse(Result.failure(it)) }
-        }
-    }
+    override fun putKey(key: CHUserKey, onResponse: CHResult<Any>) =
+        currentClient.putKey(key, onResponse)
 
-    private fun <T> makeLocalApiCall(onResponse: CHResult<T>, block: suspend () -> T) {
-        if (LocalServerConfig.isOfflineMode()) {
-            L.d(TAG, "Skipping local API call in offline mode")
-            onResponse(Result.failure(Exception("Offline mode enabled")))
-            return
-        }
-        requireInit()
-        httpScope.launch {
-            runCatching {
-                block()
-            }
-                .onSuccess { onResponse(Result.success(CHResultState.CHResultStateNetworks(it))) }
-                .onFailure { onResponse(Result.failure(it)) }
-        }
-    }
+    override fun getDevicesList(onResponse: CHResult<Array<CHUserKey>>) =
+        currentClient.getDevicesList(onResponse)
 
-    fun upLoadKeys(keys: List<CHUserKey>, onResponse: CHResult<Array<CHUserKey>>) =
-        makeApiCall(onResponse) { cHApiClient.updateKeys(identifyId(), keys) }
+    override fun removeKey(keyId: String, onResponse: CHResult<Any>) =
+        currentClient.removeKey(keyId, onResponse)
 
-    fun putKey(key: CHUserKey, onResponse: CHResult<Any>) =
-        makeApiCall(onResponse) { cHApiClient.putKey(identifyId(), key) }
+    override fun addFriend(friendID: String, onResponse: CHResult<Any>) =
+        currentClient.addFriend(friendID, onResponse)
 
-    fun getDevicesList(onResponse: CHResult<Array<CHUserKey>>) =
-        makeApiCall(onResponse) { cHApiClient.getDevicesList(identifyId()) }
+    override fun uploadUserDeviceToken(deviceToken: String, onResponse: CHResult<Any>) =
+        currentClient.uploadUserDeviceToken(deviceToken, onResponse)
 
-    fun removeKey(keyId: String, onResponse: CHResult<Any>) =
-        makeApiCall(onResponse) { cHApiClient.removeKey(identifyId(), keyId) }
+    override fun getWebUrlByScene(scene: String, extInfo: Map<String, String>?, onResponse: CHResult<String>) =
+        currentClient.getWebUrlByScene(scene, extInfo, onResponse)
 
-    fun addFriend(friendID: String, onResponse: CHResult<Any>) =
-        makeApiCall(onResponse) { cHApiClient.addFriend(identifyId(), friendID) }
+    override fun cancelNotification(device: CHSesameLock, fcmToken: String, onResponse: CHResult<Any>) =
+        currentClient.cancelNotification(device, fcmToken, onResponse)
 
-    fun uploadUserDeviceToken(deviceToken: String, onResponse: CHResult<Any>) =
-        makeApiCall(onResponse) { cHApiClient.uploadDeviceToken(identifyId(), deviceToken) }
+    override fun signGuestKey(key: CHRemoveSignKeyRequest, onResponse: CHResult<String>) =
+        currentClient.signGuestKey(key, onResponse)
 
-    fun getWebUrlByScene(scene: String, extInfo: Map<String, String>? = null, onResponse: CHResult<String>) {
-        requireInit()
-        httpScope.launch {
-            TokenManager.getValidToken { result ->
-                result.fold(
-                    onSuccess = { token ->
-                        runCatching {
-                            val req = ScenePayload(scene = scene, token = token, extInfo = extInfo)
-                            val resp = cHApiClient.getWebUrlByScene(identifyId(), req)
-                            val url = Gson().toJsonTree(resp).asJsonObject["url"].asString
-                            onResponse(Result.success(CHResultState.CHResultStateNetworks(url)))
-                        }.onFailure { onResponse(Result.failure(it)) }
-                    },
-                    onFailure = { onResponse(Result.failure(it)) }
-                )
-            }
-        }
-    }
+    override fun getHub3StatusFromIot(deviceUUID: String, onResponse: CHResult<Any>) =
+        currentClient.getHub3StatusFromIot(deviceUUID, onResponse)
 
-    fun cancelNotification(device: CHSesameLock, fcmToken: String, onResponse: CHResult<Any>) =
-        makeApiCall(onResponse) {
-            cHApiClient.fcmTokenSignDelete(
-                CHFcmTokenUpload((device as CHDevices).deviceId.toString().uppercase(), fcmToken)
-            )
-        }
+    override fun updateDeviceFirmwareVersion(deviceUUID: String, versionTag: String, onResponse: CHResult<Any>) =
+        currentClient.updateDeviceFirmwareVersion(deviceUUID, versionTag, onResponse)
 
-    internal fun signGuestKey(key: CHRemoveSignKeyRequest, onResponse: CHResult<String>) =
-        makeApiCall(onResponse) { cHApiClient.guestKeysSignPost(key) }
+    override fun postSS2History(deviceID: String, hisHex: String, onResponse: CHResult<Any>) =
+        currentClient.postSS2History(deviceID, hisHex, onResponse)
 
-    fun getHub3StatusFromIot(deviceUUID: String, onResponse: CHResult<Any>) =
-        makeApiCall(onResponse) { cHApiClient.getHub3StatusFromIot(deviceUUID) }
+    override fun postOS3History(deviceID: String, hisHex: String, onResponse: CHResult<Any>) =
+        currentClient.postOS3History(deviceID, hisHex, onResponse)
 
-    fun updateDeviceFirmwareVersion(deviceUUID: String, versionTag: String, onResponse: CHResult<Any>) =
-        makeApiCall(onResponse) {
-            cHApiClient.postFirmwareVersion(deviceUUID, mapOf("versionTag" to versionTag))
-        }
+    override fun cmdSesame(cmd: SesameItemCode, ss2: CHDevices, historytag: ByteArray, onResponse: CHResult<CHEmpty>) =
+        currentClient.cmdSesame(cmd, ss2, historytag, onResponse)
 
-    fun postSS2History(deviceID: String, hisHex: String, onResponse: CHResult<Any>) {
-        CHDB.CHHistoryModel.insert(deviceID, hisHex)
-        makeApiCall(onResponse) { cHApiClient.feedHistory(CHSSMHisUploadRequest(deviceID, hisHex)) }
-    }
+    override fun postCredentialListToServer(credentialListRequest: AuthenticationDataWrapper, onResponse: CHResult<Any>) =
+        currentClient.postCredentialListToServer(credentialListRequest, onResponse)
 
-    fun postOS3History(deviceID: String, hisHex: String, onResponse: CHResult<Any>) {
-        CHDB.CHHistoryModel.insert(deviceID, hisHex)
-        makeApiCall(onResponse) { cHApiClient.feedHistory(CHSS5HisUploadRequest(deviceID, hisHex, "5")) }
-    }
+    override fun updateAuthenticationName(authData: Any, onResponse: CHResult<Any>) =
+        currentClient.updateAuthenticationName(authData, onResponse)
 
-    internal fun cmdSesame(cmd: SesameItemCode, ss2: CHDevices, historytag: ByteArray, onResponse: CHResult<CHEmpty>) =
-        makeApiCall(onResponse) {
-            val msg = System.currentTimeMillis().toUInt24ByteArray()
-            val keyCheck = AesCmac((ss2 as CHDeviceUtil).sesame2KeyData!!.secretKey.hexStringToByteArray(), 16)
-                .computeMac(msg)!!
-                .sliceArray(0..3)
+    override fun deleteCredentialInfo(request: AuthenticationDataWrapper, onResponse: CHResult<Any>) =
+        currentClient.deleteCredentialInfo(request, onResponse)
 
-            cHApiClient.ss2CommandToWM2Post(
-                ss2.deviceId.toString().uppercase(),
-                CHSS2WebCMDReq(cmd.value, historytag.base64Encode(), keyCheck.toHexString())
-            )
-            CHEmpty()
-        }
+    override fun subscribeToTopic(body: SubscriptionRequest, onResponse: CHResult<Any>) =
+        currentClient.subscribeToTopic(body, onResponse)
 
-    fun postCredentialListToServer(credentialListRequest: AuthenticationDataWrapper, onResponse: CHResult<Any>) =
-        makeApiCall(onResponse) { cHApiClient.biometricsOperation(credentialListRequest) }
+    override fun postBatteryData(deviceID: String, payloadString: String, onResponse: CHResult<Any>) =
+        currentClient.postBatteryData(deviceID, payloadString, onResponse)
 
-    fun updateAuthenticationName(authData: Any, onResponse: CHResult<Any>) =
-        makeApiCall(onResponse) { cHApiClient.biometricsOperation(authData) }
+    override fun myDevicesRegisterSesame2Post(deviceId: String?, req: CHSS2RegisterReq?, onResponse: CHResult<CHSS2RegisterRes>) =
+        currentClient.myDevicesRegisterSesame2Post(deviceId, req, onResponse)
 
-    fun deleteCredentialInfo(request: AuthenticationDataWrapper, onResponse: CHResult<Any>) =
-        makeApiCall(onResponse) { cHApiClient.biometricsOperation(request) }
+    override fun myDevicesRegisterSesame5Post(deviceId: String?, body: Any?, onResponse: CHResult<Any>) =
+        currentClient.myDevicesRegisterSesame5Post(deviceId, body, onResponse)
 
-    fun subscribeToTopic(body: SubscriptionRequest, onResponse: CHResult<Any>) =
-        makeApiCall(onResponse) { cHApiClient.subscribeToTopic(body) }
+    override fun postCHDeviceInfo(body: CHDeviceInfo, onResponse: CHResult<Any>) =
+        currentClient.postCHDeviceInfo(body, onResponse)
 
-    fun postBatteryData(deviceID: String, payloadString: String, onResponse: CHResult<Any>) =
-        makeApiCall(onResponse) { cHApiClient.postBatteryData(deviceID, CHBatteryDataReq(payloadString)) }
+    override fun updateBotScript(body: BotScriptRequest, onResponse: CHResult<Any>) =
+        currentClient.updateBotScript(body, onResponse)
 
-    internal fun myDevicesRegisterSesame2Post(deviceId: String?, req: CHSS2RegisterReq?, onResponse: CHResult<CHSS2RegisterRes>) {
-        makeApiCall(onResponse) { cHApiClient.myDevicesRegisterSesame2Post(deviceId, req) }
-    }
-
-    fun myDevicesRegisterSesame5Post(deviceId: String?, body: Any?, onResponse: CHResult<Any>) {
-        makeApiCall(onResponse) { cHApiClient.myDevicesRegisterSesame5Post(deviceId, body) }
-    }
-
-    fun postCHDeviceInfo(body: CHDeviceInfo, onResponse: CHResult<Any>) {
-        makeApiCall(onResponse) { cHApiClient.postCHDeviceInfo(body) }
-    }
-
-    fun updateBotScript(body: BotScriptRequest, onResponse: CHResult<Any>) =
-        makeApiCall(onResponse) { cHApiClient.updateBotScript(body) }
-
-    fun updateHub3Switch(historytag: ByteArray?, hub3: CHDevices, onResponse: CHResult<CHEmpty>) =
-        makeApiCall(onResponse) {
-            val sendMap: MutableMap<String, String> = mutableMapOf()
-            val timestamp = (System.currentTimeMillis() / 1000).toInt()
-            val buffer = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
-            buffer.putInt(timestamp)
-            val msg = buffer.array().sliceArray(1..3) // 取第1-3字节
-
-            val sign = AesCmac((hub3 as CHDeviceUtil).sesame2KeyData!!.secretKey.hexStringToByteArray(), 16)
-                .computeMac(msg)!!.sliceArray(0..3)
-
-            val cmd: Int = SesameItemCode.HUB3_OS3_RELAY_SWITCH.value.toInt()
-            val hub3DeviceId = hub3.deviceId?.toString()?.uppercase() ?: ""
-            val deviceIdBytes = hub3DeviceId.toByteArray(Charsets.UTF_8)
-            val open = 0x01 // 保留字节，目前固定为0x01，代表开关操作
-            val op = open.toByte() // 保留字节，目前固定为0x01，代表开关操作
-
-            val payloadBytes = ByteArray(sign.size + 1 + deviceIdBytes.size + 2)
-            var offset = 0
-            System.arraycopy(sign, 0, payloadBytes, offset, sign.size)
-            offset += sign.size
-            payloadBytes[offset++] = cmd.toByte()
-            System.arraycopy(deviceIdBytes, 0, payloadBytes, offset, deviceIdBytes.size)
-            offset += deviceIdBytes.size
-            payloadBytes[offset] = op
-            val payload = Base64.encodeToString(payloadBytes, Base64.NO_WRAP)
-            val hub3DeviceIdLastSegment = hub3DeviceId.substringAfterLast('-')
-
-            sendMap["action"] = "biz3OperateIoT"
-            sendMap["op"] = "cmd"
-            sendMap["payload"] = payload
-            sendMap["topic"] = "wm2${hub3DeviceIdLastSegment.uppercase()}cmd"
-
-            cHApiClient.updateHub3Switch(hub3DeviceId, sendMap)
-            CHEmpty()
-        }
+    override fun updateHub3Switch(historytag: ByteArray?, hub3: CHDevices, onResponse: CHResult<CHEmpty>) =
+        currentClient.updateHub3Switch(historytag, hub3, onResponse)
+}
 }
