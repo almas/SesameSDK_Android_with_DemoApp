@@ -14,6 +14,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import cn.bingoogolapple.qrcode.core.QRCodeView
 import co.candyhouse.app.R
+import co.candyhouse.app.ext.aws.AWSStatus
 import co.candyhouse.app.base.setPage
 import co.candyhouse.app.databinding.ActivitySimpleScannerBinding
 import co.candyhouse.app.ext.webview.manager.WebViewPoolManager
@@ -194,7 +195,7 @@ class ScanQRcodeFG : BaseFG<ActivitySimpleScannerBinding>(), QRCodeView.Delegate
     }
 
     private fun handleFriendFailure() {
-        if (!AWSMobileClient.getInstance().isSignedIn) {
+        if (AWSStatus.isInitialized() && !AWSMobileClient.getInstance().isSignedIn) {
             toastMSG(getString(R.string.loginNeed))
         }
         activity?.runOnUiThread {

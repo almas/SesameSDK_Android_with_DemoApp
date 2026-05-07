@@ -4,11 +4,14 @@ import android.annotation.SuppressLint
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.provider.MediaStore
 import android.provider.Settings
 import android.view.View
 import android.widget.RelativeLayout
@@ -43,6 +46,7 @@ import co.candyhouse.app.tabs.devices.ssm2.setIsNOHand
 import co.candyhouse.app.tabs.devices.ssm2.setIsWidget
 import co.candyhouse.app.tabs.devices.ssm2.setNFC
 import co.candyhouse.app.tabs.devices.ssm2.setting.DfuService
+import co.candyhouse.sesame.server.LocalServerConfig
 import co.candyhouse.sesame.open.CHBleManager
 import co.candyhouse.sesame.open.CHBleStatusDelegate
 import co.candyhouse.sesame.open.CHScanStatus
@@ -58,6 +62,8 @@ import co.utils.alertview.enums.AlertActionStyle
 import co.utils.alertview.enums.AlertStyle
 import co.utils.alertview.fragments.toastMSG
 import co.utils.alertview.objects.AlertAction
+import co.utils.base64Encode
+import co.utils.hexStringToByteArray
 import co.utils.safeNavigate
 import com.warkiz.widget.IndicatorSeekBar
 import com.warkiz.widget.OnSeekChangeListener
@@ -313,6 +319,10 @@ abstract class BaseDeviceSettingFG<T : ViewBinding> : BaseDeviceFG<T>(), NfcSett
             }
         }
         view?.findViewById<View>(R.id.dfu_zone)?.setOnClickListener {
+            if (LocalServerConfig.isOfflineMode()) {
+                toastMSG("Update is disabled in offline mode.")
+                return@setOnClickListener
+            }
             val unlogined =
                 mDeviceModel.ssmLockLiveData.value?.deviceStatus?.value == CHDeviceLoginStatus.unlogined
 
@@ -371,6 +381,151 @@ abstract class BaseDeviceSettingFG<T : ViewBinding> : BaseDeviceFG<T>(), NfcSett
                 )
             )
             safeNavigate(R.id.action_DeviceMember_to_webViewFragment, config.toBundle())
+        }
+        
+        view?.findViewById<View>(R.id.share_zone)?.setOnClickListener {
+            showShareMenu(targetDevice)
+        }
+    }
+    
+    private fun showShareMenu(device: CHDevices) {
+        // Get UUID - try from device first, then userKey
+        val uuid = device.deviceId?.toString()?.uppercase() ?: "N/A"
+        val level = device.getLevel()
+        
+        // Get secretKey from getKey() if available, otherwise from userKey
+        val secretKey = try {
+            device.getKey().secretKey
+        } catch (_: Exception) {
+            null
+        } ?: device.userKey?.secretKey ?: "N/A"
+        
+        // For QR code, we need base64-encoded secret key
+        // The secretKey is a 32-char hex string representing 16 bytes
+        val secretKeyHex = if (secretKey != "N/A") secretKey else null
+        val encodedSecret = secretKeyHex?.hexStringToByteArray()?.base64Encode() ?: ""
+        
+        // URL encode the nickname for the QR code (handle special characters)
+        val nickname = device.getNickname()?.let { 
+            java.net.URLEncoder.encode(it, "UTF-8")
+                .replace("+", "%20") // Replace + with %20 for cleaner URLs
+        } ?: ""
+        
+        // Create QR code content with correct format: ssm://UI?t=sk&sk=BASE64_SECRET&l=LEVEL&n=NICKNAME
+        val qrContent = "ssm://UI?t=sk&sk=$encodedSecret&l=$level&n=$nickname"
+        
+        L.d("showShareMenu", "QR Content: $qrContent")
+        L.d("showShareMenu", "Secret Key (hex): $secretKeyHex")
+        L.d("showShareMenu", "Encoded Secret (base64): $encodedSecret")
+        L.d("showShareMenu", "Level: $level")
+        L.d("showShareMenu", "Nickname: ${device.getNickname()}")
+        
+        // For text sharing, only include UUID and Secret Key (remove battery and level)
+        val shareContent = """
+            Device UUID: $uuid
+            
+            Secret Key: $secretKey
+            
+            This data allows another app/device to connect to this Sesame device.
+        """.trimIndent()
+        
+        // Show share dialog
+        val items = listOf(
+            Pair(getString(R.string.share_qr_code), "qr"),
+            Pair(getString(R.string.share_text), "text")
+        )
+        
+        val itemsArray = items.toTypedArray()
+        
+        activity?.let { act ->
+            androidx.appcompat.app.AlertDialog.Builder(act)
+                .setTitle(R.string.share_device)
+                .setItems(itemsArray.map { it.first }.toTypedArray()) { _, which ->
+                    val selectedType = items[which].second
+                    when (selectedType) {
+                        "qr" -> shareQRCode(qrContent)
+                        "text" -> shareText(shareContent)
+                    }
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
+    }
+    
+    private fun shareQRCode(content: String) {
+        try {
+            // Use the existing QRCodeEncoder from the SDK
+            val qrBitmap = cn.bingoogolapple.qrcode.zxing.QRCodeEncoder.syncEncodeQRCode(
+                content,
+                500
+            )
+            
+            // Save QR code to temp file and share
+            val uri = saveBitmapToUri(qrBitmap)
+            if (uri == null) {
+                toastMSG("Failed to save QR code")
+                return
+            }
+            
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "image/png"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            
+            activity?.let { act ->
+                act.startActivity(Intent.createChooser(intent, act.getString(R.string.share_device)))
+            }
+        } catch (e: Exception) {
+            L.e("ShareQR", "Error sharing QR code: ${e.message}")
+            toastMSG("Failed to generate QR code")
+        }
+    }
+    
+    private fun shareText(content: String) {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, content)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        
+        activity?.let { act ->
+            act.startActivity(Intent.createChooser(intent, act.getString(R.string.share_device)))
+        }
+    }
+    
+    private fun saveBitmapToUri(bitmap: Bitmap): Uri? {
+        val context = requireContext()
+        val fileName = "sesame_device_qr_${System.currentTimeMillis()}.png"
+        
+        try {
+            // Try MediaStore first (Android 10+ compatible)
+            val uri = MediaStore.Images.Media.insertImage(
+                context.contentResolver,
+                bitmap,
+                fileName,
+                "Sesame Device QR Code"
+            )
+            
+            return if (uri != null) {
+                Uri.parse(uri)
+            } else {
+                // Fallback to cache directory if MediaStore fails
+                val cacheDir = context.cacheDir
+                val file = java.io.File(cacheDir, fileName)
+                file.outputStream().use { out ->
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                }
+                android.net.Uri.fromFile(file)
+            }
+        } catch (e: Exception) {
+            // Final fallback to cache directory
+            val cacheDir = context.cacheDir
+            val file = java.io.File(cacheDir, fileName)
+            file.outputStream().use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            return android.net.Uri.fromFile(file)
         }
     }
 

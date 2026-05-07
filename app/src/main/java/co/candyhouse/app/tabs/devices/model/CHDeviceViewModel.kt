@@ -26,6 +26,8 @@ import co.candyhouse.app.tabs.devices.ssm2.getIsWidget
 import co.candyhouse.app.tabs.devices.ssm2.getLevel
 import co.candyhouse.app.tabs.devices.ssm2.getNickname
 import co.candyhouse.app.tabs.devices.ssm2.getRank
+import co.candyhouse.sesame.db.CHDB
+import co.candyhouse.sesame.db.model.CHDeviceHistory
 import co.candyhouse.sesame.open.CHDeviceManager
 import co.candyhouse.sesame.open.devices.CHHub3Delegate
 import co.candyhouse.sesame.open.devices.CHSesameBot2
@@ -37,6 +39,7 @@ import co.candyhouse.sesame.open.devices.base.CHDevices
 import co.candyhouse.sesame.open.devices.base.CHProductModel
 import co.candyhouse.sesame.open.devices.base.CHSesameLock
 import co.candyhouse.sesame.server.CHAPIClientBiz
+import co.candyhouse.sesame.server.LocalServerConfig
 import co.candyhouse.sesame.server.dto.BotScriptRequest
 import co.candyhouse.sesame.server.dto.CHUserKey
 import co.candyhouse.sesame.server.dto.cheyKeyToUserKey
@@ -61,6 +64,7 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -91,6 +95,17 @@ class CHDeviceViewModel : ViewModel(), CHWifiModule2Delegate, CHDeviceStatusDele
 
     // 搜索关键词
     val searchQuery = MutableStateFlow("")
+
+    private val _deviceHistory = MutableStateFlow<List<CHDeviceHistory>>(emptyList())
+    val deviceHistory = _deviceHistory.asStateFlow()
+
+    fun fetchHistory(deviceUUID: String) {
+        CHDB.CHHistoryModel.getHistory(deviceUUID) { result ->
+            result.onSuccess {
+                _deviceHistory.value = it.data ?: emptyList()
+            }
+        }
+    }
 
     // 过滤后的设备列表
     val filteredDevices = combine(myChDevices, searchQuery) { devices, query ->
@@ -211,6 +226,11 @@ class CHDeviceViewModel : ViewModel(), CHWifiModule2Delegate, CHDeviceStatusDele
     }
 
     fun refreshDevices() {
+        if (LocalServerConfig.isOfflineMode()) {
+            L.d("CHDeviceViewModel", "Offline mode: refreshing from local database")
+            updateDevices()
+            return
+        }
         val isSignedIn = AWSStatus.getAWSLoginStatus()
         if (isSignedIn) {
             syncDeviceFromServer()

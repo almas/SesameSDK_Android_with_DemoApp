@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Base64
 import co.candyhouse.sesame.ble.CHDeviceUtil
 import co.candyhouse.sesame.ble.SesameItemCode
+import co.candyhouse.sesame.db.CHDB
 import co.candyhouse.sesame.open.devices.base.CHDevices
 import co.candyhouse.sesame.open.devices.base.CHSesameLock
 import co.candyhouse.sesame.server.dto.AuthenticationDataWrapper
@@ -66,6 +67,8 @@ object CHAPIClientBiz {
     ) {
         appContext = context.applicationContext
         LocalServerConfig.initialize(context)
+        LocalServerConfig.setEnabled(false)
+        LocalServerConfig.setOfflineMode(false)
 
         val factory = ApiClientConfigBuilder.buildApiClientFactory(
             credentialsProvider = credentialsProvider,
@@ -88,20 +91,38 @@ object CHAPIClientBiz {
             LocalServerConfig.setServerEndpoint(serverEndpoint)
         }
         LocalServerConfig.setEnabled(true)
+        LocalServerConfig.setOfflineMode(false)
         initialized = true
         L.d(TAG, "CHAPIClientBiz initialized for Local Server. Endpoint: ${LocalServerConfig.getServerEndpoint()}")
     }
 
+    @JvmStatic
+    @Synchronized
+    fun initializeOfflineMode(context: Context) {
+        appContext = context.applicationContext
+        LocalServerConfig.initialize(context)
+        LocalServerConfig.setEnabled(false)
+        LocalServerConfig.setOfflineMode(true)
+        initialized = true
+        L.d(TAG, "CHAPIClientBiz initialized for COMPLETE OFFLINE MODE.")
+    }
+
     private fun requireInit() {
+        if (LocalServerConfig.isOfflineMode()) return
         check(initialized) { "CHAPIClient is not initialized. Call CHAPIClient.initialize(...) first." }
     }
 
     private fun identifyId(): String {
         requireInit()
-        return AppIdentifyIdUtil.get(appContext)
+        return if (LocalServerConfig.isOfflineMode()) "offline_user" else AppIdentifyIdUtil.get(appContext)
     }
 
     private fun <T> makeApiCall(onResponse: CHResult<T>, block: () -> T) {
+        if (LocalServerConfig.isOfflineMode()) {
+            L.d(TAG, "Skipping API call in offline mode")
+            onResponse(Result.failure(Exception("Offline mode enabled")))
+            return
+        }
         requireInit()
         httpScope.launch {
             runCatching { block() }
@@ -111,6 +132,11 @@ object CHAPIClientBiz {
     }
 
     private fun <T> makeLocalApiCall(onResponse: CHResult<T>, block: suspend () -> T) {
+        if (LocalServerConfig.isOfflineMode()) {
+            L.d(TAG, "Skipping local API call in offline mode")
+            onResponse(Result.failure(Exception("Offline mode enabled")))
+            return
+        }
         requireInit()
         httpScope.launch {
             runCatching {
@@ -176,11 +202,15 @@ object CHAPIClientBiz {
             cHApiClient.postFirmwareVersion(deviceUUID, mapOf("versionTag" to versionTag))
         }
 
-    fun postSS2History(deviceID: String, hisHex: String, onResponse: CHResult<Any>) =
+    fun postSS2History(deviceID: String, hisHex: String, onResponse: CHResult<Any>) {
+        CHDB.CHHistoryModel.insert(deviceID, hisHex)
         makeApiCall(onResponse) { cHApiClient.feedHistory(CHSSMHisUploadRequest(deviceID, hisHex)) }
+    }
 
-    fun postOS3History(deviceID: String, hisHex: String, onResponse: CHResult<Any>) =
+    fun postOS3History(deviceID: String, hisHex: String, onResponse: CHResult<Any>) {
+        CHDB.CHHistoryModel.insert(deviceID, hisHex)
         makeApiCall(onResponse) { cHApiClient.feedHistory(CHSS5HisUploadRequest(deviceID, hisHex, "5")) }
+    }
 
     internal fun cmdSesame(cmd: SesameItemCode, ss2: CHDevices, historytag: ByteArray, onResponse: CHResult<CHEmpty>) =
         makeApiCall(onResponse) {

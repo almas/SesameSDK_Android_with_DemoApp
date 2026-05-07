@@ -1,5 +1,6 @@
 package co.candyhouse.sesame.utils
 
+import co.candyhouse.sesame.server.LocalServerConfig
 import com.amazonaws.mobile.client.AWSMobileClient
 import com.amazonaws.mobile.client.Callback
 import com.amazonaws.mobile.client.results.Tokens
@@ -12,6 +13,10 @@ import com.amazonaws.mobile.client.results.Tokens
 object TokenManager {
 
     fun getValidToken(callback: (Result<String?>) -> Unit) {
+        if (LocalServerConfig.isOfflineMode() || LocalServerConfig.isEnabled()) {
+            callback(Result.success("offline_token"))
+            return
+        }
         if (!AWSMobileClient.getInstance().isSignedIn()) {
             callback(Result.success(null))
             return

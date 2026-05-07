@@ -12,6 +12,7 @@ import co.candyhouse.app.ext.webview.manager.WebViewSafeInitializer
 import co.candyhouse.sesame.open.CHBleManager
 import co.candyhouse.sesame.server.CHAPIClientBiz
 import co.candyhouse.sesame.server.CHIotManagerPublic
+import co.candyhouse.sesame.server.LocalServerConfig
 import co.candyhouse.sesame.utils.AppIdentifyIdUtil
 import co.candyhouse.sesame.utils.SharedPreferencesUtils
 import co.candyhouse.sesame.utils.L
@@ -74,23 +75,27 @@ open class BaseApp : Application() {
     }
 
     private fun initializeAWS() {
-        // Check if local server mode should be enabled
-        val useLocalServer = BuildConfig.DEBUG // Can be configured via SharedPreferences
+        // Check if offline mode or local server mode should be enabled
+        val useOfflineMode = BuildConfig.USE_OFFLINE_MODE
+        val useLocalServer = BuildConfig.USE_LOCAL_SERVER
 
-        if (useLocalServer) {
-            // Initialize with local server (optional: provide endpoint)
-            // CHAPIClientBiz.initializeLocalServer(this, "http://192.168.1.100:3000")
-        } else {
-            try {
-                AWSStatus.initAWSMobileClient(this)
-                setCHAPIClient()
-            } catch (e: Exception) {
-                // Fallback to local server if AWS init fails
-                L.e("BaseApp", "AWS initialization failed, using local server mode", e)
+        when {
+            useOfflineMode -> {
+                L.d("BaseApp", "Initializing in COMPLETE OFFLINE MODE")
+                CHAPIClientBiz.initializeOfflineMode(this)
+            }
+            useLocalServer -> {
+                L.d("BaseApp", "Initializing in LOCAL SERVER MODE")
+                CHAPIClientBiz.initializeLocalServer(this, BuildConfig.LOCAL_SERVER_ENDPOINT)
+            }
+            else -> {
                 try {
-                    CHAPIClientBiz.initializeLocalServer(this)
-                } catch (ex: Exception) {
-                    L.e("BaseApp", "Local server init also failed", ex)
+                    AWSStatus.initAWSMobileClient(this)
+                    setCHAPIClient()
+                } catch (e: Exception) {
+                    // Fallback to offline mode if AWS init fails and no local server
+                    L.e("BaseApp", "AWS initialization failed, falling back to offline mode", e)
+                    CHAPIClientBiz.initializeOfflineMode(this)
                 }
             }
         }
@@ -114,6 +119,10 @@ open class BaseApp : Application() {
     }
 
     private fun setupSubscriptionManager() {
+        if (LocalServerConfig.isOfflineMode()) {
+            L.d("BaseApp", "Skipping TopicSubscriptionManager in offline mode")
+            return
+        }
         subscriptionManager = TopicSubscriptionManager(this)
         subscriptionManager.checkAndSubscribeToTopics()
     }

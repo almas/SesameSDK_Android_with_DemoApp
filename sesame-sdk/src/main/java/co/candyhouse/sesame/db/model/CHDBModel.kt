@@ -15,6 +15,15 @@ data class CHDevice(
     val sesame2PublicKey: String // 64
 )
 
+@Entity
+data class CHDeviceHistory(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val deviceUUID: String,
+    val historyData: String, // Hex string
+    val timestamp: Long,
+    val recordDate: String // YYYY-MM-DD for easier querying
+)
+
 internal fun CHDevice.createHistag(histag_: ByteArray? = null): ByteArray {
     val histag = histag_ ?: this.historyTag ?: byteArrayOf()
     val limitedHistag = histag.take(21)

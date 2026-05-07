@@ -17,6 +17,8 @@ import co.candyhouse.app.databinding.FgLoginMailBinding
 import co.candyhouse.app.tabs.devices.model.CHLoginViewModel
 import co.candyhouse.sesame.utils.L
 import co.utils.safeNavigate
+import co.utils.alertview.fragments.toastMSG
+import androidx.navigation.fragment.findNavController
 import com.amazonaws.mobile.client.AWSMobileClient
 import com.amazonaws.mobile.client.Callback
 import com.amazonaws.mobile.client.UserState
@@ -56,6 +58,13 @@ class LoginMailFG : BaseNFG<FgLoginMailBinding>() {
         if (mloginViewModel.gUserState.value == UserState.SIGNED_IN) {
             return
         }
+
+        if (co.candyhouse.sesame.server.LocalServerConfig.isOfflineMode()) {
+            toastMSG("Login is disabled in offline mode.")
+            findNavController().navigateUp()
+            return
+        }
+
         bind.etInput.isFocusableInTouchMode = true
         bind.etInput.requestFocus()
         bind.etInput.addTextChangedListener {

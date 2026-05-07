@@ -1,6 +1,7 @@
 package co.utils
 
 import co.candyhouse.app.R
+import co.candyhouse.app.ext.aws.AWSStatus
 import co.candyhouse.sesame.open.CHDeviceManager
 import co.candyhouse.sesame.utils.SharedPreferencesUtils
 import co.candyhouse.sesame.utils.uuidToBytes
@@ -24,6 +25,7 @@ object UserUtils {
     }
 
     fun loadUserUserId() {
+        if (!AWSStatus.isInitialized()) return
         runCatching {
             AWSMobileClient.getInstance().getUserAttributes(object : Callback<Map<String, String>> {
                 override fun onResult(userAttributes: Map<String, String>) {
