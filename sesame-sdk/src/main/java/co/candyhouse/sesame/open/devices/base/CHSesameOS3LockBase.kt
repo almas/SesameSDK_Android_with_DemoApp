@@ -172,6 +172,26 @@ internal abstract class CHSesameOS3LockBase : CHSesameOS3(), CHSesameLock, CHDev
 
     protected fun reportBatteryData(payloadString: String) {
         L.d("os3lock", "[reportBatteryData] ${isInternetAvailable()}, ${!isConnectedByWM2}, payload: $payloadString")
+        
+        // Parse battery percentage directly from BLE payload for offline mode support
+        // Battery data is in first 2 bytes (little-endian, 10-bit value scaled to 3600 = 100%)
+        try {
+            val payload = payloadString.hexStringToByteArray()
+            if (payload.size >= 2) {
+                // Extract the 2-byte battery value (little-endian)
+                val batteryRaw = (((payload[1].toInt() and 0xFF) shl 8) or (payload[0].toInt() and 0xFF))
+                // Convert to percentage: (raw * 100) / 1023
+                val batteryPercent = (batteryRaw * 100) / 1023
+                // Clamp to valid range (0-100)
+                val validBatteryPercent = batteryPercent.coerceIn(0, 100)
+                batteryPercentage = validBatteryPercent
+                L.d("os3lock", "[reportBatteryData] Parsed battery: $batteryRaw -> $validBatteryPercent%")
+            }
+        } catch (e: Exception) {
+            L.e("os3lock", "[reportBatteryData] Failed to parse battery from payload: $payloadString", e)
+        }
+        
+        // Also sync with server if online
         CHAPIClientBiz.postBatteryData(deviceId.toString().uppercase(), payloadString) {
             it.onSuccess { resp ->
                 batteryPercentage = ((resp.data as? Map<*, *>)?.get("batteryPercentage") as? Number)?.toInt()
