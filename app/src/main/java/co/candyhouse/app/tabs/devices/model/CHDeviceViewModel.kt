@@ -101,14 +101,37 @@ class CHDeviceViewModel : ViewModel(), CHWifiModule2Delegate, CHDeviceStatusDele
     val deviceHistory = _deviceHistory.asStateFlow()
 
     fun fetchHistory(deviceUUID: String) {
-        CHDB.CHHistoryModel.getHistory(deviceUUID.uppercase()) { result ->
-            result.onSuccess {
-                _deviceHistory.value = it.data ?: emptyList()
+        L.d("CHDeviceViewModel", "fetchHistory called for $deviceUUID")
+        viewModelScope.launch {
+            CHDB.CHHistoryModel.getHistory(deviceUUID.uppercase()) { result ->
+                result.onSuccess { state ->
+                    val historyList = state.data ?: emptyList()
+                    L.d("CHDeviceViewModel", "History loaded with ${historyList.size} records")
+                    _deviceHistory.value = historyList
+                }
+                result.onFailure { error ->
+                    L.e("CHDeviceViewModel", "Failed to load history: ${error.message}", error)
+                    _deviceHistory.value = emptyList()
+                }
             }
         }
     }
 
-    // 过滤后的设备列表
+    fun clearHistory(deviceUUID: String) {
+        L.d("CHDeviceViewModel", "clearHistory called for $deviceUUID")
+        viewModelScope.launch {
+            CHDB.CHHistoryModel.deleteHistory(deviceUUID.uppercase()) { result ->
+                result.onSuccess { state ->
+                    val deletedCount = state.data ?: 0
+                    L.d("CHDeviceViewModel", "History cleared with $deletedCount records deleted")
+                    _deviceHistory.value = emptyList()
+                }
+                result.onFailure { error ->
+                    L.e("CHDeviceViewModel", "Failed to clear history: ${error.message}", error)
+                }
+            }
+        }
+    }
     val filteredDevices = combine(myChDevices, searchQuery) { devices, query ->
         if (query.isEmpty()) {
             devices

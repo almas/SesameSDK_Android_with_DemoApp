@@ -79,6 +79,17 @@ abstract class CHDB : RoomDatabase() {
                 }
             }
         }
+
+        fun deleteHistory(deviceUUID: String, onResponse: CHResult<Int>) {
+            dbScope.launch {
+                try {
+                    val deletedCount = dao.deleteByDeviceUUID(deviceUUID)
+                    onResponse(Result.success(CHResultState.CHResultStateNetworks(deletedCount)))
+                } catch (e: Exception) {
+                    onResponse(Result.failure(e))
+                }
+            }
+        }
     }
 
     object CHSS2Model {

@@ -256,6 +256,9 @@ fun SesameComposeWebViewContent(
 
     val isOffline = OfflineConfig.isOfflineMode() || OfflineConfig.isEnabled()
 
+    // Handle history scene - show local history regardless of online/offline mode
+    val showLocalHistory = config.scene == "history"
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -287,15 +290,32 @@ fun SesameComposeWebViewContent(
                 binding.moreIcon.visibility = View.GONE
             }
 
-            if (config.scene == "history" && isOffline) {
+            if (showLocalHistory) {
                 binding.swipeRefresh.visibility = View.GONE
                 binding.errorComposeView.visibility = View.VISIBLE
                 binding.errorComposeView.setContent {
-                    val historyList by deviceModel?.deviceHistory?.collectAsState() ?: remember { mutableStateOf(emptyList()) }
-                    LaunchedEffect(config.params["deviceUUID"]) {
-                        config.params["deviceUUID"]?.let { deviceModel?.fetchHistory(it) }
+                    if (deviceModel != null) {
+                        val historyList by deviceModel.deviceHistory.collectAsState()
+                        LaunchedEffect(config.params["deviceUUID"]) {
+                            config.params["deviceUUID"]?.let {
+                                L.d(logTag, "Fetching history for device: $it")
+                                deviceModel.fetchHistory(it)
+                            }
+                        }
+                        LocalHistoryView(
+                            historyList = historyList,
+                            onCleanHistory = {
+                                config.params["deviceUUID"]?.let { deviceUUID ->
+                                    deviceModel.clearHistory(deviceUUID)
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("Device model not available")
+                        }
                     }
-                    LocalHistoryView(historyList = historyList, modifier = Modifier.fillMaxSize())
                 }
             } else if (showFallback) {
                 binding.swipeRefresh.visibility = View.GONE
