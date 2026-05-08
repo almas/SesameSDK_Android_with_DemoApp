@@ -372,6 +372,11 @@ import java.util.UUID
 
         sendEncryptCommand(SSM2Payload(SSM2OpCode.async, SesameItemCode.lock, his)) { res ->
             if (res.cmdResultCode == SesameResultCode.success.value) {
+                // Save history immediately after successful lock operation
+                historyTag?.let {
+                    val hisHex = it.toHexString()
+                    CHDB.CHHistoryModel.insert(deviceId.toString().uppercase(), hisHex)
+                }
                 result.invoke(Result.success(CHResultState.CHResultStateBLE(CHEmpty())))
             } else {
                 result.invoke(Result.failure(NSError(res.cmdResultCode.toString(), "CBCentralManager", res.cmdResultCode.toInt())))
@@ -387,6 +392,11 @@ import java.util.UUID
         val his = sesame2KeyData!!.createHistag(historyTag)
         sendEncryptCommand(SSM2Payload(SSM2OpCode.async, SesameItemCode.unlock, his)) { res ->
             if (res.cmdResultCode == SesameResultCode.success.value) {
+                // Save history immediately after successful unlock operation
+                historyTag?.let {
+                    val hisHex = it.toHexString()
+                    CHDB.CHHistoryModel.insert(deviceId.toString().uppercase(), hisHex)
+                }
                 result.invoke(Result.success(CHResultState.CHResultStateBLE(CHEmpty())))
             } else {
                 result.invoke(Result.failure(NSError(res.cmdResultCode.toString(), "CBCentralManager", res.cmdResultCode.toInt())))
@@ -408,6 +418,11 @@ import java.util.UUID
         val his = sesame2KeyData!!.createHistag(historyTag)
         sendEncryptCommand(SSM2Payload(SSM2OpCode.async, SesameItemCode.click, his)) { res ->
             if (res.cmdResultCode == SesameResultCode.success.value) {
+                // Save history immediately after successful click operation
+                historyTag?.let {
+                    val hisHex = it.toHexString()
+                    CHDB.CHHistoryModel.insert(deviceId.toString().uppercase(), hisHex)
+                }
                 result.invoke(Result.success(CHResultState.CHResultStateBLE(CHEmpty())))
             } else {
                 result.invoke(Result.failure(NSError(res.cmdResultCode.toString(), "CBCentralManager", res.cmdResultCode.toInt())))

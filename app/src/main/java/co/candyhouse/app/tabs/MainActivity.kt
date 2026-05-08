@@ -32,6 +32,7 @@ import co.candyhouse.sesame.open.devices.CHSesameBot
 import co.candyhouse.sesame.open.devices.CHSesameBot2
 import co.candyhouse.sesame.open.devices.base.CHDeviceLoginStatus
 import co.candyhouse.sesame.open.devices.base.CHSesameLock
+import co.candyhouse.sesame.server.OfflineConfig
 import co.candyhouse.sesame.utils.L
 import co.candyhouse.sesame.utils.SharedPreferencesUtils
 import co.receiver.widget.SesameForegroundService
@@ -67,7 +68,12 @@ class MainActivity : BaseActivity(), OnSharedPreferenceChangeListener {
         // 先显示本地数据
         deviceViewModel.updateDevices()
 
-        if (AWSStatus.isInitialized()) {
+        if (OfflineConfig.isOfflineMode()) {
+            L.d("MainActivity", "Running in offline mode, skipping AWS setup")
+            deviceViewModel.refreshDevices()
+            // Force connection attempts immediately after loading devices
+            deviceViewModel.handleAppGoToForeground()
+        } else if (AWSStatus.isInitialized()) {
             setupAWSFeatures()
         } else {
             AWSStatus.initAWSMobileClient(this) { isLoggedIn ->
@@ -99,8 +105,17 @@ class MainActivity : BaseActivity(), OnSharedPreferenceChangeListener {
 
     override fun onResume() {
         super.onResume()
-        CHBleManager.enableScan {}
-        deviceViewModel.handleAppGoToForeground()
+        // Ensure BLE scanning is enabled when app comes to foreground
+        CHBleManager.enableScan { result ->
+            result.onSuccess {
+                L.d("MainActivity", "BLE scan enabled successfully")
+            }.onFailure {
+                L.e("MainActivity", "Failed to enable BLE scan: ${it.message}")
+            }
+        }
+        // Handle app coming to foreground with improved connection logic
+        // Use a more robust approach to ensure proper initialization
+        handleAppForeground()
         checkNfcAdapterPermissions()
     }
 
@@ -394,6 +409,29 @@ class MainActivity : BaseActivity(), OnSharedPreferenceChangeListener {
                     AnalyticsUtil.logButtonClick(action)
                 }
             }
+        }
+    }
+
+    private fun handleAppForeground() {
+        // Enhanced connection handling with proper retry logic and delays
+        CoroutineScope(IO).launch {
+            // Give the system some time to properly initialize
+            delay(200)
+            
+            // Try to enable BLE scanning again for good measure
+            CHBleManager.enableScan { result ->
+                result.onSuccess {
+                    L.d("MainActivity", "BLE scan re-enabled successfully")
+                }.onFailure {
+                    L.e("MainActivity", "Failed to re-enable BLE scan: ${it.message}")
+                }
+            }
+            
+            // Delay slightly to allow system to stabilize
+            delay(300)
+            
+            // Trigger device connection logic with better timing
+            deviceViewModel.handleAppGoToForeground()
         }
     }
 

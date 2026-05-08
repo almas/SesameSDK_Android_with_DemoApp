@@ -184,6 +184,11 @@ internal enum class CHError(val value: NSError) {
             if (!isBleAvailable(result)) return
             sendEncryptCommand(SSM2Payload(SSM2OpCode.async, SesameItemCode.lock, sesame2KeyData!!.createHistag(historytag))) { res ->
                 if (res.cmdResultCode == SesameResultCode.success.value) {
+                    // Save history immediately after successful lock operation
+                    historytag?.let {
+                        val hisHex = it.toHexString()
+                        CHDB.CHHistoryModel.insert(deviceId.toString().uppercase(), hisHex)
+                    }
                     result.invoke(Result.success(CHResultState.CHResultStateBLE(CHEmpty())))
                 } else {
                     result.invoke(Result.failure(NSError(res.cmdResultCode.toString(), "CBCentralManager", res.cmdResultCode.toInt())))
@@ -201,6 +206,11 @@ internal enum class CHError(val value: NSError) {
             val his = sesame2KeyData!!.createHistag(historytag)
             sendEncryptCommand(SSM2Payload(SSM2OpCode.async, SesameItemCode.unlock, his)) { res ->
                 if (res.cmdResultCode == SesameResultCode.success.value) {
+                    // Save history immediately after successful unlock operation
+                    historytag?.let {
+                        val hisHex = it.toHexString()
+                        CHDB.CHHistoryModel.insert(deviceId.toString().uppercase(), hisHex)
+                    }
                     result.invoke(Result.success(CHResultState.CHResultStateBLE(CHEmpty())))
                 } else {
                     result.invoke(Result.failure(NSError(res.cmdResultCode.toString(), "CBCentralManager", res.cmdResultCode.toInt())))
@@ -612,9 +622,7 @@ internal enum class CHError(val value: NSError) {
             if (res.cmdResultCode == SesameResultCode.success.value) {
                 if (res.payload.size >= 13) {  // 添加边界检查
                     val data = res.payload.toHexString()
-                    if (isInternetAvailable()) {
-                        CHAPIClientBiz.postSS2History(deviceId.toString().uppercase(), data) {}
-                    }
+                    CHAPIClientBiz.postSS2History(deviceId.toString().uppercase(), data) {}
                 }
             }
         }

@@ -153,7 +153,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="53dp"
                     android:background="@color/white"
-                    android:visibility="gone">
+                    android:visibility="visible">
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -457,6 +457,43 @@
                         android:textColor="@color/text_hint"
                         tools:ignore="RtlSymmetry"
                         tools:text="111111-1234-4321-1234-1234567812345678" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1px"
+                        android:layout_alignParentBottom="true"
+                        android:layout_marginStart="17dp"
+                        android:background="@color/gray0" />
+
+                </RelativeLayout>
+
+                <RelativeLayout
+                    android:id="@+id/share_zone"
+                    android:layout_width="match_parent"
+                    android:layout_height="53dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@color/white">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerVertical="true"
+                        android:layout_marginStart="17dp"
+                        android:background="@color/white"
+                        android:gravity="center_vertical"
+                        android:text="Share Device"
+                        android:textColor="@color/black"
+                        android:textSize="17sp" />
+
+                    <ImageView
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:paddingEnd="12dp"
+                        android:scaleType="center"
+                        android:src="@drawable/ic_arrow_gray"
+                        tools:ignore="RtlSymmetry" />
 
                     <View
                         android:layout_width="match_parent"

@@ -29,8 +29,8 @@ import co.candyhouse.app.tabs.devices.model.CHLoginViewModel
 import co.candyhouse.sesame.open.CHBleManager
 import co.candyhouse.sesame.server.CHAPIClientBiz
 import co.candyhouse.sesame.utils.L
-import co.receiver.widget.SesameForegroundService
 import co.candyhouse.sesame.utils.SharedPreferencesUtils
+import co.receiver.widget.SesameForegroundService
 import co.utils.applyInsetsPadding
 import com.amazonaws.mobile.client.AWSMobileClient
 import com.amazonaws.mobile.client.UserState
@@ -149,6 +149,10 @@ open class BaseActivity : AppCompatActivity(), EasyPermissions.PermissionCallbac
     }
 
     protected fun setAWSUserStateListener() {
+        if (!AWSStatus.isInitialized()) {
+            L.d("hcia", "AWS not initialized, skipping UserStateListener")
+            return
+        }
         AWSMobileClient.getInstance().addUserStateListener { details ->
             L.d("hcia", "💋----> 登入狀態:" + details?.userState?.name)
             when (details?.userState) {

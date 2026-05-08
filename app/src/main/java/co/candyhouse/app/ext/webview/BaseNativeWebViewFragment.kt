@@ -107,6 +107,7 @@ abstract class BaseNativeWebViewFragment<T : ViewBinding> : HomeFragment<T>() {
         }
 
         WebViewUrlLoader.loadWebUrl(
+            context = requireContext(),
             scene = webViewName,
             extInfo = getExtInfo(),
             onSuccess = { url ->

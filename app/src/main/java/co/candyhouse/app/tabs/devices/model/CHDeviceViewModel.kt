@@ -26,6 +26,8 @@ import co.candyhouse.app.tabs.devices.ssm2.getIsWidget
 import co.candyhouse.app.tabs.devices.ssm2.getLevel
 import co.candyhouse.app.tabs.devices.ssm2.getNickname
 import co.candyhouse.app.tabs.devices.ssm2.getRank
+import co.candyhouse.sesame.db.CHDB
+import co.candyhouse.sesame.db.model.CHDeviceHistory
 import co.candyhouse.sesame.open.CHDeviceManager
 import co.candyhouse.sesame.open.devices.CHHub3Delegate
 import co.candyhouse.sesame.open.devices.CHSesameBot2
@@ -37,6 +39,7 @@ import co.candyhouse.sesame.open.devices.base.CHDevices
 import co.candyhouse.sesame.open.devices.base.CHProductModel
 import co.candyhouse.sesame.open.devices.base.CHSesameLock
 import co.candyhouse.sesame.server.CHAPIClientBiz
+import co.candyhouse.sesame.server.OfflineConfig
 import co.candyhouse.sesame.server.dto.BotScriptRequest
 import co.candyhouse.sesame.server.dto.CHUserKey
 import co.candyhouse.sesame.server.dto.cheyKeyToUserKey
@@ -59,8 +62,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -91,6 +96,17 @@ class CHDeviceViewModel : ViewModel(), CHWifiModule2Delegate, CHDeviceStatusDele
 
     // 搜索关键词
     val searchQuery = MutableStateFlow("")
+
+    private val _deviceHistory = MutableStateFlow<List<CHDeviceHistory>>(emptyList())
+    val deviceHistory = _deviceHistory.asStateFlow()
+
+    fun fetchHistory(deviceUUID: String) {
+        CHDB.CHHistoryModel.getHistory(deviceUUID.uppercase()) { result ->
+            result.onSuccess {
+                _deviceHistory.value = it.data ?: emptyList()
+            }
+        }
+    }
 
     // 过滤后的设备列表
     val filteredDevices = combine(myChDevices, searchQuery) { devices, query ->
@@ -211,6 +227,11 @@ class CHDeviceViewModel : ViewModel(), CHWifiModule2Delegate, CHDeviceStatusDele
     }
 
     fun refreshDevices() {
+        if (OfflineConfig.isOfflineMode()) {
+            L.d("CHDeviceViewModel", "Offline mode: refreshing from local database")
+            updateDevices()
+            return
+        }
         val isSignedIn = AWSStatus.getAWSLoginStatus()
         if (isSignedIn) {
             syncDeviceFromServer()
@@ -399,6 +420,27 @@ class CHDeviceViewModel : ViewModel(), CHWifiModule2Delegate, CHDeviceStatusDele
     fun handleAppGoToForeground() {
         viewModelScope.launch(Dispatchers.Main) {
             _neeReflesh.postValue(Event(BeanDevices(emptyList())))
+            // Force reconnection attempts for all devices with improved retry logic
+            viewModelScope.launch {
+                // Add a longer initial delay to ensure proper system initialization
+                delay(300) // Allow UI to stabilize
+                
+                // Try connecting to devices with retry logic
+                myChDevices.value.forEach { device ->
+                    if (device.isLockDevice()) {
+                        if (device.deviceStatus == CHDeviceStatus.ReceivedAdV) {
+                            L.d("CHDeviceViewModel", "尝试连接设备ID=${device.deviceId}")
+                            device.connect { result ->
+                                result.onSuccess {
+                                    L.d("CHDeviceViewModel", "设备连接成功: ${device.deviceId}")
+                                }.onFailure {
+                                    L.e("CHDeviceViewModel", "设备连接失败: ${device.deviceId}, 错误: ${it.message}")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -727,6 +769,38 @@ class CHDeviceViewModel : ViewModel(), CHWifiModule2Delegate, CHDeviceStatusDele
             SharedPreferencesUtils.preferences.edit {
                 remove(bot2ScriptCurIndexKey)
                 remove(botScriptInitKey)
+            }
+        }
+    }
+
+    fun dropDeviceOffline() {
+        val targetDevice: CHDevices = ssmLockLiveData.value!!
+        myChDevices.value =
+            myChDevices.value.filter { device -> device.deviceId != targetDevice.deviceId } as ArrayList<CHDevices>
+        _neeReflesh.postValue(Event(BeanDevices(emptyList())))
+
+        unregisterNotification(targetDevice)
+        clearBotScript(targetDevice)
+
+        targetDevice.dropKey {
+            it.onSuccess {
+                SharedPreferencesUtils.preferences.edit() {
+                    remove(targetDevice.deviceId.toString())
+                }
+            }
+        }
+    }
+
+    fun resetDeviceOffline() {
+        val targetDevice: CHDevices = ssmLockLiveData.value!!
+        unregisterNotification(targetDevice)
+        clearBotScript(targetDevice)
+        targetDevice.dropKey {
+            it.onSuccess {
+                SharedPreferencesUtils.preferences.edit() {
+                    remove(targetDevice.deviceId.toString())
+                }
+                refreshDevices()
             }
         }
     }

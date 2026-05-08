@@ -8,6 +8,7 @@ import co.candyhouse.sesame.ble.SesameItemCode
 import co.candyhouse.sesame.ble.SesameResultCode
 import co.candyhouse.sesame.ble.isBleAvailable
 import co.candyhouse.sesame.ble.os3.base.SesameOS3Payload
+import co.candyhouse.sesame.db.CHDB
 import co.candyhouse.sesame.db.model.historyTagBLE
 import co.candyhouse.sesame.db.model.historyTagIOT
 import co.candyhouse.sesame.open.devices.CHSesame2MechStatus
@@ -158,6 +159,11 @@ internal class CHSesame5Device : CHSesameOS3LockBase(), CHSesame5 {
             DeviceSegmentType.cipher
         ) { res ->
             if (res.cmdResultCode == SesameResultCode.success.value) {
+                // Save history immediately after successful unlock operation
+                historytag?.let {
+                    val hisHex = it.toHexString()
+                    CHDB.CHHistoryModel.insert(deviceId.toString().uppercase(), hisHex)
+                }
                 result.invoke(Result.success(CHResultState.CHResultStateBLE(CHEmpty())))
             } else {
                 result.invoke(Result.failure(NSError(res.cmdResultCode.toString(), "CBCentralManager", res.cmdResultCode.toInt())))
@@ -179,6 +185,11 @@ internal class CHSesame5Device : CHSesameOS3LockBase(), CHSesame5 {
             DeviceSegmentType.cipher
         ) { res ->
             if (res.cmdResultCode == SesameResultCode.success.value) {
+                // Save history immediately after successful lock operation
+                historytag?.let {
+                    val hisHex = it.toHexString()
+                    CHDB.CHHistoryModel.insert(deviceId.toString().uppercase(), hisHex)
+                }
                 result.invoke(Result.success(CHResultState.CHResultStateBLE(CHEmpty())))
             } else {
                 result.invoke(Result.failure(NSError(res.cmdResultCode.toString(), "CBCentralManager", res.cmdResultCode.toInt())))

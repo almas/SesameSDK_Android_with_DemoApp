@@ -11,11 +11,13 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.core.widget.addTextChangedListener
 import androidx.fragment.app.activityViewModels
+import androidx.navigation.fragment.findNavController
 import co.candyhouse.app.R
 import co.candyhouse.app.base.BaseNFG
 import co.candyhouse.app.databinding.FgLoginMailBinding
 import co.candyhouse.app.tabs.devices.model.CHLoginViewModel
 import co.candyhouse.sesame.utils.L
+import co.utils.alertview.fragments.toastMSG
 import co.utils.safeNavigate
 import com.amazonaws.mobile.client.AWSMobileClient
 import com.amazonaws.mobile.client.Callback
@@ -56,6 +58,13 @@ class LoginMailFG : BaseNFG<FgLoginMailBinding>() {
         if (mloginViewModel.gUserState.value == UserState.SIGNED_IN) {
             return
         }
+
+        if (co.candyhouse.sesame.server.OfflineConfig.isOfflineMode()) {
+            toastMSG("Login is disabled in offline mode.")
+            findNavController().navigateUp()
+            return
+        }
+
         bind.etInput.isFocusableInTouchMode = true
         bind.etInput.requestFocus()
         bind.etInput.addTextChangedListener {

@@ -43,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -71,6 +72,7 @@ import co.candyhouse.app.ext.webview.manager.WebViewSafeInitializer.isWebViewAva
 import co.candyhouse.app.ext.webview.manager.WebViewUrlLoader.rememberWebUrl
 import co.candyhouse.app.tabs.devices.model.CHDeviceViewModel
 import co.candyhouse.sesame.open.CHDeviceManager
+import co.candyhouse.sesame.server.OfflineConfig
 import co.candyhouse.sesame.utils.L
 import co.candyhouse.sesame.utils.SharedPreferencesUtils
 import co.utils.AnalyticsUtil
@@ -252,6 +254,8 @@ fun SesameComposeWebViewContent(
 
     BackHandler { handleBack() }
 
+    val isOffline = OfflineConfig.isOfflineMode() || OfflineConfig.isEnabled()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -283,7 +287,17 @@ fun SesameComposeWebViewContent(
                 binding.moreIcon.visibility = View.GONE
             }
 
-            if (showFallback) {
+            if (config.scene == "history" && isOffline) {
+                binding.swipeRefresh.visibility = View.GONE
+                binding.errorComposeView.visibility = View.VISIBLE
+                binding.errorComposeView.setContent {
+                    val historyList by deviceModel?.deviceHistory?.collectAsState() ?: remember { mutableStateOf(emptyList()) }
+                    LaunchedEffect(config.params["deviceUUID"]) {
+                        config.params["deviceUUID"]?.let { deviceModel?.fetchHistory(it) }
+                    }
+                    LocalHistoryView(historyList = historyList, modifier = Modifier.fillMaxSize())
+                }
+            } else if (showFallback) {
                 binding.swipeRefresh.visibility = View.GONE
                 binding.errorComposeView.visibility = View.VISIBLE
                 binding.errorComposeView.setContent {

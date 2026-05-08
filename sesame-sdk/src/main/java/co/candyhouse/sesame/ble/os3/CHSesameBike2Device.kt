@@ -73,6 +73,11 @@ internal open class CHSesameBike2Device : CHSesameOS3LockBase(), CHSesameBike2 {
                 SesameOS3Payload(SesameItemCode.unlock.value, sesame2KeyData!!.historyTagBLE(historytag)),
                 DeviceSegmentType.cipher
             ) {
+                // Save history immediately after successful unlock operation
+                historytag?.let {
+                    val hisHex = it.toHexString()
+                    CHDB.CHHistoryModel.insert(deviceId.toString().uppercase(), hisHex)
+                }
                 result.invoke(Result.success(CHResultState.CHResultStateBLE(CHEmpty())))
             }
         } else {

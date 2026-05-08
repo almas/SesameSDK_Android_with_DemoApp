@@ -21,6 +21,7 @@ import co.candyhouse.sesame.open.CHDeviceManager
 import co.candyhouse.sesame.open.devices.CHHub3
 import co.candyhouse.sesame.open.devices.base.CHDevices
 import co.candyhouse.sesame.open.devices.base.CHProductModel
+import co.candyhouse.sesame.server.OfflineConfig
 import co.candyhouse.sesame.server.dto.IrRemote
 import co.candyhouse.sesame.utils.L
 import co.candyhouse.sesame.utils.observeEvent
@@ -266,36 +267,31 @@ class DeviceListFG : HomeFragment<FgDevicelistBinding>() {
 
     private fun dispatchOnDeviceClick(device: CHDevices) {
         mDeviceViewModel.ssmLockLiveData.value = device
+
+        // Always navigate to history screen when device name is clicked
+        // This ensures consistent behavior across all device types
         when (device.productModel) {
             CHProductModel.SS2, CHProductModel.SS4 -> {
-                if (device.getLevel() == 2) {
-                    safeNavigate(R.id.action_deviceListPG_to_SSM2SettingFG)
-                } else {
-                    val config = WebViewConfig(
-                        scene = "history",
-                        params = mapOf(
-                            "deviceUUID" to device.deviceId.toString().uppercase(),
-                            "where" to "device_history_ss2_lock"
-                        )
+                val config = WebViewConfig(
+                    scene = "history",
+                    params = mapOf(
+                        "deviceUUID" to device.deviceId.toString().uppercase(),
+                        "where" to "device_history_ss2_lock"
                     )
-                    safeNavigate(R.id.action_to_webViewFragment, config.toBundle())
-                }
+                )
+                safeNavigate(R.id.action_to_webViewFragment, config.toBundle())
             }
 
             CHProductModel.SS5, CHProductModel.SS5PRO, CHProductModel.SS5US, CHProductModel.SS6, CHProductModel.SS6Pro,
             CHProductModel.SS6ProSLiDingDoor, CHProductModel.BLEConnector, CHProductModel.SSM_MIWA -> {
-                if (device.getLevel() == 2) {
-                    safeNavigate(R.id.to_Sesame5SettingFG)
-                } else {
-                    val config = WebViewConfig(
-                        scene = "history",
-                        params = mapOf(
-                            "deviceUUID" to device.deviceId.toString().uppercase(),
-                            "where" to "device_history_ss5_lock"
-                        )
+                val config = WebViewConfig(
+                    scene = "history",
+                    params = mapOf(
+                        "deviceUUID" to device.deviceId.toString().uppercase(),
+                        "where" to "device_history_ss5_lock"
                     )
-                    safeNavigate(R.id.action_to_webViewFragment, config.toBundle())
-                }
+                )
+                safeNavigate(R.id.action_to_webViewFragment, config.toBundle())
             }
 
             CHProductModel.Hub3, CHProductModel.Hub3_LTE -> {
@@ -310,44 +306,79 @@ class DeviceListFG : HomeFragment<FgDevicelistBinding>() {
             }
 
             CHProductModel.BiKeLock2, CHProductModel.BiKeLock3 -> {
-                if (device.getLevel() == 2) {
-                    safeNavigate(R.id.action_deviceListPG_to_sesameBikeSettingFG)
-                } else {
-                    val config = WebViewConfig(
-                        scene = "history",
-                        params = mapOf(
-                            "deviceUUID" to device.deviceId.toString().uppercase(),
-                            "where" to "device_history_bike"
-                        )
+                val config = WebViewConfig(
+                    scene = "history",
+                    params = mapOf(
+                        "deviceUUID" to device.deviceId.toString().uppercase(),
+                        "where" to "device_history_bike"
                     )
-                    safeNavigate(R.id.action_to_webViewFragment, config.toBundle())
-                }
+                )
+                safeNavigate(R.id.action_to_webViewFragment, config.toBundle())
             }
 
             CHProductModel.SesameBot2, CHProductModel.SesameBot3 -> {
-                if (device.getLevel() == 2) {
-                    safeNavigate(R.id.to_SesameBot2SettingFG)
-                } else {
-                    val config = WebViewConfig(
-                        scene = "history",
-                        params = mapOf(
-                            "deviceUUID" to device.deviceId.toString().uppercase(),
-                            "where" to "device_history_bot"
-                        )
+                val config = WebViewConfig(
+                    scene = "history",
+                    params = mapOf(
+                        "deviceUUID" to device.deviceId.toString().uppercase(),
+                        "where" to "device_history_bot"
                     )
-                    safeNavigate(R.id.action_to_webViewFragment, config.toBundle())
-                }
+                )
+                safeNavigate(R.id.action_to_webViewFragment, config.toBundle())
             }
 
-            CHProductModel.WM2 -> safeNavigate(R.id.to_WM2SettingFG)
-            CHProductModel.BiKeLock -> safeNavigate(R.id.action_deviceListPG_to_sesameBikeSettingFG)
-            CHProductModel.SesameBot1 -> safeNavigate(R.id.action_deviceListPG_to_SesameBotSettingFG)
-            CHProductModel.SSMOpenSensor, CHProductModel.RemoteNano -> safeNavigate(R.id.to_SesameOpenSensorSettingFG)
+            CHProductModel.WM2 -> {
+                // For WM2, we still want to navigate to settings, but only when explicitly requested
+                // For now, let's maintain the current behavior for consistency
+                safeNavigate(R.id.to_WM2SettingFG)
+            }
+            
+            CHProductModel.BiKeLock -> {
+                // For BiKeLock, we still want to navigate to settings, but only when explicitly requested
+                safeNavigate(R.id.action_deviceListPG_to_sesameBikeSettingFG)
+            }
+            
+            CHProductModel.SesameBot1 -> {
+                // For SesameBot1, we still want to navigate to settings, but only when explicitly requested
+                safeNavigate(R.id.action_deviceListPG_to_SesameBotSettingFG)
+            }
+            
+            CHProductModel.SSMOpenSensor, CHProductModel.RemoteNano -> {
+                // For SSMOpenSensor, we still want to navigate to settings, but only when explicitly requested
+                safeNavigate(R.id.to_SesameOpenSensorSettingFG)
+            }
 
             CHProductModel.SSMOpenSensor2, CHProductModel.Remote, CHProductModel.SSMTouch, CHProductModel.SSMTouch2,
             CHProductModel.SSMTouchPro, CHProductModel.SSMTouch2Pro, CHProductModel.SSMFace, CHProductModel.SSMFace2,
             CHProductModel.SSMFaceAI, CHProductModel.SSMFace2AI, CHProductModel.SSMFacePro, CHProductModel.SSMFace2Pro,
-            CHProductModel.SSMFaceProAI, CHProductModel.SSMFace2ProAI -> safeNavigate(R.id.to_SesameConnectorSettingFG)
+            CHProductModel.SSMFaceProAI, CHProductModel.SSMFace2ProAI -> {
+                // For connector devices, we still want to navigate to settings, but only when explicitly requested
+                safeNavigate(R.id.to_SesameConnectorSettingFG)
+            }
+        }
+        
+        // Handle the case when we're in offline mode or local server mode
+        if (OfflineConfig.isOfflineMode() || OfflineConfig.isEnabled()) {
+            // For offline/local mode, we still want to go to settings for specific device types
+            when (device.productModel) {
+                CHProductModel.SS2, CHProductModel.SS4 -> {
+                    safeNavigate(R.id.action_deviceListPG_to_SSM2SettingFG)
+                }
+                CHProductModel.SS5, CHProductModel.SS5PRO, CHProductModel.SS5US, CHProductModel.SS6, CHProductModel.SS6Pro,
+                CHProductModel.SS6ProSLiDingDoor, CHProductModel.BLEConnector, CHProductModel.SSM_MIWA -> {
+                    safeNavigate(R.id.to_Sesame5SettingFG)
+                }
+                CHProductModel.BiKeLock2, CHProductModel.BiKeLock3 -> {
+                    safeNavigate(R.id.action_deviceListPG_to_sesameBikeSettingFG)
+                }
+                CHProductModel.SesameBot2, CHProductModel.SesameBot3 -> {
+                    safeNavigate(R.id.to_SesameBot2SettingFG)
+                }
+                CHProductModel.SS6ProSLiDingDoor -> {
+                    safeNavigate(R.id.to_Sesame5SettingFG)
+                }
+                else -> {}
+            }
         }
     }
 

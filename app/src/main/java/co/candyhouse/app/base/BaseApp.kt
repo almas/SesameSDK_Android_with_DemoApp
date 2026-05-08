@@ -3,6 +3,7 @@ package co.candyhouse.app.base
 import android.app.Application
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.preference.PreferenceManager
 import co.candyhouse.app.BuildConfig
@@ -13,6 +14,7 @@ import co.candyhouse.sesame.open.CHBleManager
 import co.candyhouse.sesame.server.CHAPIClientBiz
 import co.candyhouse.sesame.server.CHIotManagerPublic
 import co.candyhouse.sesame.utils.AppIdentifyIdUtil
+import co.candyhouse.sesame.utils.L
 import co.candyhouse.sesame.utils.SharedPreferencesUtils
 import co.receiver.TopicSubscriptionManager
 import com.amazonaws.mobile.client.AWSMobileClient
@@ -62,12 +64,38 @@ open class BaseApp : Application() {
     }
 
     private fun setupCrashlytics() {
-        FirebaseCrashlytics.getInstance().isCrashlyticsCollectionEnabled = !BuildConfig.DEBUG
+        try {
+            if (BuildConfig.DEBUG) {
+                FirebaseCrashlytics.getInstance().isCrashlyticsCollectionEnabled = false
+            }
+        } catch (e: Exception) {
+            // Ignore Firebase errors
+            Log.d("BaseApp", "setupCrashlytics failed: ${e}")
+        }
     }
 
     private fun initializeAWS() {
-        AWSStatus.initAWSMobileClient(this)
-        setCHAPIClient()
+        // Check if offline mode or local server mode should be enabled
+        val useOfflineMode = BuildConfig.USE_OFFLINE_MODE
+
+        when {
+            useOfflineMode -> {
+                L.d("BaseApp", "Initializing in COMPLETE OFFLINE MODE")
+                // Offline mode initialization - no special initialization needed
+                // All offline functionality is handled by CHAPIClientBiz.initialize() call
+            }
+
+            else -> {
+                try {
+                    AWSStatus.initAWSMobileClient(this)
+                    setCHAPIClient()
+                } catch (e: Exception) {
+                    // Fallback to offline mode if AWS init fails and no local server
+                    L.e("BaseApp", "AWS initialization failed, falling back to offline mode", e)
+                    // Offline mode initialization - no special initialization needed
+                }
+            }
+        }
     }
 
     private fun initializeWebViewProvider() {
@@ -88,6 +116,12 @@ open class BaseApp : Application() {
     }
 
     private fun setupSubscriptionManager() {
+        // Check if we're in offline mode - replacing OfflineConfig reference
+        // Since OfflineConfig doesn't exist, we use the BUILD CONFIG directly
+        if (BuildConfig.USE_OFFLINE_MODE) {
+            L.d("BaseApp", "Skipping TopicSubscriptionManager in offline mode")
+            return
+        }
         subscriptionManager = TopicSubscriptionManager(this)
         subscriptionManager.checkAndSubscribeToTopics()
     }

@@ -1,6 +1,6 @@
 <resources>
     <string name="launching_why_need_location_permission">Android 6.0 またはそれ以上の場合、Bluetoothを適正に作動させるためには位置情報にアクセスする許可が必要です。そうでなければ、アプリがセサミを見つけることができません。</string>
-    <string name="app_name">Sesame</string>
+    <string name="app_name">Sesame offline</string>
     <string name="dfu_status_error_msg">發生錯誤</string>
     <string name="Sesame5us">セサミ 5 北米北欧版</string>
     <string name="title_me">自分</string>
@@ -238,6 +238,14 @@
     <string name="ble_tx_power">BLE送信出力</string>
     <string name="dBm">dBm</string>
     <string name="dfu_busy">他のCANDY HOUSE製品を更新中、お待ち下さいませ。</string>
+    <string name="share_device">鍵をシェア</string>
+    <string name="share_device_data">デバイスデータ</string>
+    <string name="share_qr_code">QRコードをシェア</string>
+    <string name="share_text">テキストとしてシェア</string>
+    <string name="share_device_description">セサミデバイスを他のアプリやデバイスと共有します。</string>
+    <string name="share_data_content">Device UUID: %1$s\nDevice Model: %2$s\nKey Level: %3$s\nBattery: %4$s\n\nSecret Key: %5$s\n\nこのデータにより、別のアプリやデバイスがこのセサミデバイスに接続できるようになります。</string>
+    <string name="already_latest_version">すでに最新バージョンです。強制的にアップデートしますか？</string>
+    <string name="firmware_file_not_found">ファームウェアファイルが見つかりません。後でもう一度お試しください。</string>
 </resources>
 
 

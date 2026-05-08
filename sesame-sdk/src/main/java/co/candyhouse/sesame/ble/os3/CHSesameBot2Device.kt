@@ -92,6 +92,11 @@ internal class CHSesameBot2Device : CHSesameOS3LockBase(), CHSesameBot2 {
             SesameOS3Payload(itemCode.value, sesame2KeyData!!.historyTagBLE(historytag)),
             DeviceSegmentType.cipher
         ) {
+            // Save history immediately after successful click operation
+            historytag?.let {
+                val hisHex = it.toHexString()
+                CHDB.CHHistoryModel.insert(deviceId.toString().uppercase(), hisHex)
+            }
             result.invoke(Result.success(CHResultState.CHResultStateBLE(CHEmpty())))
         }
     }

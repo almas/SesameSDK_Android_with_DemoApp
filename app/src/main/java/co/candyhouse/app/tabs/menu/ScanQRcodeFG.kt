@@ -16,6 +16,7 @@ import cn.bingoogolapple.qrcode.core.QRCodeView
 import co.candyhouse.app.R
 import co.candyhouse.app.base.setPage
 import co.candyhouse.app.databinding.ActivitySimpleScannerBinding
+import co.candyhouse.app.ext.aws.AWSStatus
 import co.candyhouse.app.ext.webview.manager.WebViewPoolManager
 import co.candyhouse.app.tabs.devices.model.CHDeviceViewModel
 import co.candyhouse.app.tabs.devices.ssm2.getLevel
@@ -37,15 +38,17 @@ import co.utils.noHashtoUUID
 import co.utils.toHexString
 import com.amazonaws.mobile.client.AWSMobileClient
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
+import com.google.zxing.DecodeHintType
 import com.google.zxing.MultiFormatReader
 import com.google.zxing.NotFoundException
 import com.google.zxing.RGBLuminanceSource
+import com.google.zxing.common.GlobalHistogramBinarizer
 import com.google.zxing.common.HybridBinarizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import pub.devrel.easypermissions.EasyPermissions
-import java.io.FileNotFoundException
 
 class ScanQRcodeFG : BaseFG<ActivitySimpleScannerBinding>(), QRCodeView.Delegate,
     EasyPermissions.PermissionCallbacks {
@@ -87,9 +90,11 @@ class ScanQRcodeFG : BaseFG<ActivitySimpleScannerBinding>(), QRCodeView.Delegate
         super.onResume()
         if (EasyPermissions.hasPermissions(requireContext(), Manifest.permission.CAMERA)) {
             bind.zxingview.visibility = View.VISIBLE
-            bind.zxingview.startCamera()
-            bind.zxingview.startSpotAndShowRect()
-            bind.zxingview.setDelegate(this)
+            bind.zxingview.post {
+                bind.zxingview.startCamera()
+                bind.zxingview.startSpotAndShowRect()
+                bind.zxingview.setDelegate(this)
+            }
         }
     }
 
@@ -194,7 +199,7 @@ class ScanQRcodeFG : BaseFG<ActivitySimpleScannerBinding>(), QRCodeView.Delegate
     }
 
     private fun handleFriendFailure() {
-        if (!AWSMobileClient.getInstance().isSignedIn) {
+        if (AWSStatus.isInitialized() && !AWSMobileClient.getInstance().isSignedIn) {
             toastMSG(getString(R.string.loginNeed))
         }
         activity?.runOnUiThread {
@@ -374,28 +379,43 @@ class ScanQRcodeFG : BaseFG<ActivitySimpleScannerBinding>(), QRCodeView.Delegate
 
     private fun handleImageResult(data: Intent?) {
         data?.data?.let { uri ->
-            try {
-                val inputStream = requireActivity().contentResolver.openInputStream(uri)
-                val bitmap = BitmapFactory.decodeStream(inputStream)
-                bitmap?.let {
-                    val width = it.width
-                    val height = it.height
-                    val pixels = IntArray(width * height)
-                    it.getPixels(pixels, 0, width, 0, 0, width, height)
-                    it.recycle()
-                    val source = RGBLuminanceSource(width, height, pixels)
-                    val bBitmap = BinaryBitmap(HybridBinarizer(source))
-                    val reader = MultiFormatReader()
-                    try {
-                        val result = reader.decode(bBitmap)
-                        L.d("hcia", "result:" + result.text)
-                        parceURI(result.text)
-                    } catch (e: NotFoundException) {
-                        L.d("hcia", "decode exception$e")
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    val inputStream = requireActivity().contentResolver.openInputStream(uri)
+                    val bitmap = BitmapFactory.decodeStream(inputStream)
+                    bitmap?.let {
+                        val width = it.width
+                        val height = it.height
+                        val pixels = IntArray(width * height)
+                        it.getPixels(pixels, 0, width, 0, 0, width, height)
+                        it.recycle()
+                        val source = RGBLuminanceSource(width, height, pixels)
+                        val bBitmap = BinaryBitmap(HybridBinarizer(source))
+                        val reader = MultiFormatReader()
+                        val hints = mutableMapOf<DecodeHintType, Any>()
+                        hints[DecodeHintType.TRY_HARDER] = true
+                        hints[DecodeHintType.POSSIBLE_FORMATS] = listOf(BarcodeFormat.QR_CODE)
+                        hints[DecodeHintType.CHARACTER_SET] = "utf-8"
+                        try {
+                            val result = reader.decode(bBitmap, hints)
+                            L.d("hcia", "result:" + result.text)
+                            parceURI(result.text)
+                        } catch (e: NotFoundException) {
+                            try {
+                                val fallbackBitmap = BinaryBitmap(GlobalHistogramBinarizer(source))
+                                val result = reader.decode(fallbackBitmap, hints)
+                                L.d("hcia", "result fallback:" + result.text)
+                                parceURI(result.text)
+                            } catch (fallbackException: NotFoundException) {
+                                L.d("hcia", "decode exception: both binarizers failed")
+                                qrCodeError(getString(R.string.qrcodeNotSupport))
+                            }
+                        }
                     }
+                } catch (e: Exception) {
+                    L.d("hcia", "can not open file$uri$e")
+                    qrCodeError(getString(R.string.qrcodeNotSupport))
                 }
-            } catch (e: FileNotFoundException) {
-                L.d("hcia", "can not open file$uri$e")
             }
         }
     }

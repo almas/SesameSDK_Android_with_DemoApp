@@ -27,8 +27,8 @@ public class QRCodeEncoder {
 
     static {
         HINTS.put(EncodeHintType.CHARACTER_SET, "utf-8");
-        HINTS.put(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.L);
-        HINTS.put(EncodeHintType.MARGIN, 0);
+        HINTS.put(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.H);
+        HINTS.put(EncodeHintType.MARGIN, 2);
     }
 
     private QRCodeEncoder() {
